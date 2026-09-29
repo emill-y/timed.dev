@@ -25,6 +25,7 @@ body {
   line-height: 1.5;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
+  font-variant-ligatures: none;
 }
 ::selection { background: var(--red); color: #000; }
 button, input, textarea { font: inherit; color: inherit; }

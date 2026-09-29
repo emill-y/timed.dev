@@ -1,11 +1,13 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { api, type Cfg, type Session } from "@/lib/client";
+import { api, deviceToken, type Cfg, type Session } from "@/lib/client";
 
 type Waiting = { status: "waiting"; ticket: string; inQueue: number; size: number; waited: number; botFillMs: number; shared: boolean };
 type Matched = { status: "matched"; matchId: string; playerId: string };
 
-export default function Queue({ cfg, onMatched, onCancel }: { cfg: Cfg; onMatched: (s: Session) => void; onCancel: () => void }) {
+type Props = { cfg: Cfg; onMatched: (s: Session) => void; onCancel: () => void; onError: (msg: string) => void };
+
+export default function Queue({ cfg, onMatched, onCancel, onError }: Props) {
   const [state, setState] = useState<Waiting | null>(null);
   const [t0] = useState(() => Date.now());
   const [now, setNow] = useState(Date.now());
@@ -15,12 +17,15 @@ export default function Queue({ cfg, onMatched, onCancel }: { cfg: Cfg; onMatche
     let alive = true;
     const tick = async () => {
       try {
-        const r = await api<Waiting | Matched>("/api/queue", { ...cfg, ticket: ticket.current });
+        const r = await api<Waiting | Matched>("/api/queue", { ...cfg, token: deviceToken(), ticket: ticket.current });
         if (!alive) return;
         if (r.status === "matched") return onMatched({ matchId: r.matchId, playerId: r.playerId });
         ticket.current = r.ticket;
         setState(r);
-      } catch {}
+      } catch (e) {
+        const msg = (e as Error).message;
+        if (alive && /claimed/.test(msg)) return onError(msg);
+      }
       if (alive) setTimeout(tick, 1000);
     };
     tick();
@@ -42,7 +47,7 @@ export default function Queue({ cfg, onMatched, onCancel }: { cfg: Cfg; onMatche
 
   return (
     <section className="queue">
-      <div className="label">searching · {cfg.mode} · {cfg.clock}{cfg.party ? ` · party ${cfg.party}` : ""}</div>
+      <div className="label">searching · {cfg.format === "ai" ? "ai mode" : "classic"} · {cfg.mode} · {cfg.clock}{cfg.party ? ` · party ${cfg.party}` : ""}</div>
       <div className="big-num">{String(Math.floor(secs / 60)).padStart(2, "0")}:{String(secs % 60).padStart(2, "0")}</div>
       <div className="seats">
         {Array.from({ length: size }, (_, i) => (

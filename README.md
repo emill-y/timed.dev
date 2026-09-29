@@ -15,14 +15,39 @@ LeetCode tested whether you could write a loop from memory. timed.dev tests **sp
 - Nobody else in the queue? After 12s **ghosts** (bots on a realistic pace curve) take the empty seats. You can also go straight to *practice vs ghost*.
 - Results show your time, submits, runs, and **paste share** (how much of your code was pasted rather than typed). It's a stat, not a penalty.
 
-Keyboard first: `enter` to queue, `ctrl+enter` to run, `ctrl+shift+enter` to submit, `esc` to back out.
+## AI mode: how good a Claude coder are you?
+
+A separate format (with its own queue and leaderboard) built around **boss tickets**: an expression evaluator, an LRU cache replay, a markdown table importer, dependency install order, and a JSON-path resolver. These are specs a model half-solves on the first try, with hidden tests that catch the other half.
+
+- **Built-in copilot panel.** Paste your own **Anthropic** key (pick Claude Opus 5.5, Sonnet 5.5 or Haiku 4.5, plus an effort level) or an **OpenAI** key (any model name).
+- **Your key stays private.** It's stored only in your browser (the current tab, or localStorage if you tick "remember"), and requests go **straight from your browser to the provider**. The timed.dev server never sees the key or your prompts.
+- **Context and code are automatic.** Each prompt carries your current code and your last test run. The reply's code block is auto-applied (with undo).
+- **Scoring.** Results show prompts used and tokens spent. Boss wins pay x1.25.
+
+## Points & leaderboard
+
+Monkeytype-style. There's no signup: typing a handle claims it for your browser (a random secret in localStorage; the server stores only its hash).
+
+| | points |
+|---|---|
+| win / draw / loss | 100 / 40 / 10 |
+| each test passed | +5 |
+| speed bonus (wins) | up to +100, scaled by clock time left |
+| clock multiplier | bullet x1.5 · blitz x1.2 · rapid x1 |
+| AI mode | x1.25 |
+| no human opponents (ghosts only) | x0.3 |
+
+Boards: all-time, today, classic, AI mode, at `/leaderboard`. Points are awarded server-side when a match resolves, once per match.
+
+Keyboard first: `enter` to queue, `ctrl+enter` to run, `ctrl+shift+enter` to submit, `ctrl+k` to prompt the copilot, `esc` to back out.
 
 ## Stack
 
 - Next.js 15 (App Router) + React 19 + TypeScript. No UI kit, just hand-written CSS.
 - Player code runs in a sandboxed **Web Worker in the player's own browser**, with a 3s kill switch for infinite loops. The server never executes user code.
 - Matchmaking and match state go through two small API routes (`/api/queue` and `/api/match/[id]`), polled once a second.
-- Storage: **Upstash Redis** over REST when configured. Without it, state lives in process memory, which is fine for `npm run dev`. On serverless, though, separate instances don't share memory, so live human-vs-human matches need Redis.
+- The AI copilot uses the official Anthropic and OpenAI JS SDKs in the browser, with `dangerouslyAllowBrowser`. That's safe here because the only key involved is the player's own, kept on the player's machine.
+- Storage: **Upstash Redis** over REST when configured (queue, matches, accounts, leaderboards). Without it, state lives in process memory, which is fine for `npm run dev`. On serverless, though, separate instances don't share memory, so live human-vs-human matches need Redis.
 
 ## Run locally
 
@@ -45,5 +70,6 @@ Tickets live in `lib/problems.ts`. Each one has a prompt, a stub, and tests (mar
 
 ## Known limits (MVP)
 
-- Players report their own test results, so a determined cheater can lie. The fix is server-side verification in an isolated runner.
+- Players report their own test results, so a determined cheater can lie, and that also means leaderboard points can be faked. The fix is server-side verification in an isolated runner.
+- Handles are tied to one browser. Clearing site data loses the handle; there's no account recovery yet.
 - Only JavaScript for now. Python via Pyodide is the obvious next step.

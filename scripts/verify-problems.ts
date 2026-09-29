@@ -84,6 +84,100 @@ const ref: Record<string, (...a: any[]) => unknown> = {
     if (cur) lines.push(cur);
     return lines;
   },
+  calc(src: string) {
+    let i = 0;
+    const s = src.replace(/\s+/g, "");
+    const num = (): number | null => {
+      if (s[i] === "-") { i++; const v = num(); return v == null ? null : -v; }
+      if (s[i] === "(") { i++; const v = expr(); if (v == null || s[i] !== ")") return null; i++; return v; }
+      const m = s.slice(i).match(/^\d+(\.\d+)?/);
+      if (!m) return null;
+      i += m[0].length;
+      return Number(m[0]);
+    };
+    const term = (): number | null => {
+      let v = num();
+      while (v != null && (s[i] === "*" || s[i] === "/")) {
+        const op = s[i++]; const r = num();
+        if (r == null) return null;
+        if (op === "/" && r === 0) return null;
+        v = op === "*" ? v * r : v / r;
+      }
+      return v;
+    };
+    const expr = (): number | null => {
+      let v = term();
+      while (v != null && (s[i] === "+" || s[i] === "-")) {
+        const op = s[i++]; const r = term();
+        if (r == null) return null;
+        v = op === "+" ? v + r : v - r;
+      }
+      return v;
+    };
+    const v = expr();
+    return v == null || i !== s.length ? null : v;
+  },
+  lru(cap: number, ops: any[]) {
+    const m = new Map();
+    const out: number[] = [];
+    for (const [op, k, v] of ops) {
+      if (op === "get") {
+        if (!m.has(k)) { out.push(-1); continue; }
+        const x = m.get(k); m.delete(k); m.set(k, x); out.push(x);
+      } else {
+        if (cap === 0) continue;
+        m.delete(k); m.set(k, v);
+        if (m.size > cap) m.delete(m.keys().next().value);
+      }
+    }
+    return out;
+  },
+  parseTable(md: string) {
+    const rows = md.split("\n").map((l) => l.trim()).filter(Boolean)
+      .map((l) => l.replace(/^\|/, "").replace(/\|$/, "").split("|").map((c) => c.trim()));
+    if (!rows.length) return [];
+    const [head, ...rest] = rows;
+    return rest.filter((r) => !r.every((c) => /^:?-+:?$/.test(c))).map((r) =>
+      Object.fromEntries(head.map((h, j) => {
+        const c = r[j] ?? "";
+        return [h, c === "" ? null : /^-?\d+(\.\d+)?$/.test(c) ? Number(c) : c];
+      })));
+  },
+  installOrder(deps: Record<string, string[]>) {
+    const nodes = new Set<string>();
+    for (const [k, v] of Object.entries(deps)) { nodes.add(k); v.forEach((d) => nodes.add(d)); }
+    const done: string[] = [];
+    const left = new Set(nodes);
+    while (left.size) {
+      const ready = [...left].filter((n) => (deps[n] ?? []).every((d) => !left.has(d))).sort();
+      if (!ready.length) return null;
+      left.delete(ready[0]); done.push(ready[0]);
+    }
+    return done;
+  },
+  query(obj: any, path: string) {
+    const toks = path.match(/[^.[\]]+|\[(\d+|\*)\]/g) ?? [];
+    const MISS = Symbol();
+    const walk = (v: any, t: string[]): any => {
+      if (!t.length) return v;
+      const [h, ...r] = t;
+      if (h === "[*]") {
+        if (!Array.isArray(v)) return MISS;
+        const out: any[] = [];
+        for (const e of v) {
+          const x = walk(e, r);
+          if (x === MISS) continue;
+          if (r.includes("[*]") && Array.isArray(x)) out.push(...x); else out.push(x);
+        }
+        return out;
+      }
+      const key = h.startsWith("[") ? Number(h.slice(1, -1)) : h;
+      if (v == null || typeof v !== "object" || !(key in v)) return MISS;
+      return walk(v[key], r);
+    };
+    const x = walk(obj, toks);
+    return x === MISS ? null : x;
+  },
 };
 
 let fail = 0;

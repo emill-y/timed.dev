@@ -1,7 +1,29 @@
 // Small browser-side helpers shared by the screens.
-export type Cfg = { mode: "1v1" | "2v2"; clock: "bullet" | "blitz" | "rapid"; name: string; party: string };
+export type Cfg = { format: "classic" | "ai"; mode: "1v1" | "2v2"; clock: "bullet" | "blitz" | "rapid"; name: string; party: string };
 export type Session = { matchId: string; playerId: string };
-export type Stats = { runs: number; submits: number; failed: number; keys: number; pasted: number; typed: number };
+export type Stats = {
+  runs: number; submits: number; failed: number; keys: number; pasted: number; typed: number;
+  prompts: number; tokensIn: number; tokensOut: number; aiChars: number;
+};
+export const EMPTY_STATS: Stats = { runs: 0, submits: 0, failed: 0, keys: 0, pasted: 0, typed: 0, prompts: 0, tokensIn: 0, tokensOut: 0, aiChars: 0 };
+
+export type Profile = {
+  handle: string; points: number; byFormat: { classic: number; ai: number };
+  wins: number; losses: number; draws: number; matches: number;
+  best: { classic?: number; ai?: number }; rank: number | null;
+};
+
+// Secret that proves this browser owns its handle. Never shown, never shared.
+export function deviceToken(): string {
+  let t = load<string>("token", "");
+  if (!t) {
+    const b = new Uint8Array(24);
+    crypto.getRandomValues(b);
+    t = Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+    save("token", t);
+  }
+  return t;
+}
 export type HistoryItem = { r: "W" | "L" | "D"; t: number | null; p: string; m: string; at: number };
 
 export function load<T>(k: string, fallback: T, store: "local" | "session" = "local"): T {
@@ -35,6 +57,9 @@ export function fmtTime(ms: number | null | undefined) {
 
 export async function api<T>(url: string, body?: unknown): Promise<T> {
   const r = await fetch(url, body === undefined ? { cache: "no-store" } : { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json" } });
-  if (!r.ok) throw new Error(String(r.status));
+  if (!r.ok) {
+    const j = await r.json().catch(() => ({}));
+    throw new Error(j.error || String(r.status));
+  }
   return r.json();
 }

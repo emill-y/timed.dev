@@ -24,13 +24,14 @@ const eq = (a, b) => {
 };
 const fmt = (v) => { try { return typeof v === "string" ? v : JSON.stringify(v); } catch { return String(v); } };
 onmessage = (e) => {
-  const { code, fn, tests } = e.data;
+  const { code, fn, tests, noEval } = e.data;
   const logs = [];
   const log = (...a) => { if (logs.length < 200) logs.push(a.map(fmt).join(" ")); };
   const con = { log, info: log, warn: log, error: log, debug: log };
   let f;
   try {
-    f = new Function("console", code + "\\n;return typeof " + fn + " === 'function' ? " + fn + " : undefined;")(con);
+    const blocked = noEval ? [undefined, undefined] : [eval, Function];
+    f = new Function("console", "eval", "Function", code + "\\n;return typeof " + fn + " === 'function' ? " + fn + " : undefined;")(con, ...blocked);
   } catch (err) {
     postMessage({ results: [], logs, fatal: String(err && err.message || err) });
     return;
@@ -92,6 +93,6 @@ export function runTests(code: string, problem: Problem, includeHidden: boolean,
     };
     // Models love `export`; it's meaningless here, so drop it.
     const src = code.replace(/^(\s*)export\s+(default\s+)?/gm, "$1");
-    w.postMessage({ code: src, fn: problem.fn, tests: tests.map(({ args, expect }) => ({ args, expect })) });
+    w.postMessage({ code: src, fn: problem.fn, noEval: Boolean(problem.noEval), tests: tests.map(({ args, expect }) => ({ args, expect })) });
   });
 }

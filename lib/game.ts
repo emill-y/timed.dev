@@ -1,9 +1,15 @@
-import { getProblem, randomProblemId } from "./problems";
+import { getProblem, randomProblemId, type Format } from "./problems";
+export type { Format };
 
 export type Mode = "1v1" | "2v2";
 export const MODES: Record<Mode, { size: number; label: string }> = {
   "1v1": { size: 2, label: "1v1 duel" },
   "2v2": { size: 4, label: "2v2 co-hack" },
+};
+
+export const FORMATS: Record<Format, { label: string; blurb: string }> = {
+  classic: { label: "classic", blurb: "everyday tickets · bring any tools you like" },
+  ai: { label: "ai mode", blurb: "boss tickets · built-in copilot with your own key" },
 };
 
 export const CLOCKS = [
@@ -23,8 +29,10 @@ export type Bot = { finishFrac: number; finishes: boolean; seed: number };
 export type Player = {
   id: string;
   name: string;
+  handle?: string; // verified account; only these earn points
   team: 0 | 1;
   bot?: Bot;
+  prompts?: number; // AI-mode copilot calls
   passed: number;
   attempts: number;
   doneAt?: number; // ms after start, penalties included
@@ -32,15 +40,19 @@ export type Player = {
   lastSeen: number;
 };
 
+export type Award = { pts: number; parts: [string, number][] };
+
 export type Match = {
   id: string;
   problemId: string;
+  format: Format;
   mode: Mode;
   clock: ClockId;
   clockMs: number;
   total: number;
   startAt: number;
   players: Player[];
+  awards?: Record<string, Award>;
 };
 
 export type Result = {
@@ -71,12 +83,13 @@ export function makeBot(team: 0 | 1, taken: Set<string>): Player {
   };
 }
 
-export function createMatch(mode: Mode, clock: ClockId, players: Player[]): Match {
-  const problemId = randomProblemId();
+export function createMatch(format: Format, mode: Mode, clock: ClockId, players: Player[]): Match {
+  const problemId = randomProblemId(format);
   const c = CLOCKS.find((x) => x.id === clock) ?? CLOCKS[1];
   return {
     id: uid() + uid(),
     problemId,
+    format,
     mode,
     clock: c.id,
     clockMs: c.sec * 1000,
@@ -147,6 +160,8 @@ export function viewFor(m: Match, playerId: string) {
     players: live.players.map((p) => ({
       ...p,
       bot: undefined,
+      handle: undefined,
+      ranked: Boolean(p.handle),
       isBot: Boolean(p.bot),
       code: me && p.team === me.team && p.id !== me.id ? p.code : undefined,
     })),
@@ -154,3 +169,30 @@ export function viewFor(m: Match, playerId: string) {
 }
 export type MatchView = ReturnType<typeof viewFor>;
 export type PlayerView = MatchView["players"][number];
+
+const CLOCK_MULT: Record<ClockId, number> = { bullet: 1.5, blitz: 1.2, rapid: 1 };
+
+// Monkeytype-style XP. Winning fast on a short clock pays most; ghosts-only
+// matches pay a fraction so the ladder can't be farmed offline.
+export function scoreFor(m: Match, p: Player, r: Result): Award {
+  const parts: [string, number][] = [];
+  const res = r.winner == null ? "draw" : r.winner === p.team ? "win" : "loss";
+  parts.push([res, res === "win" ? 100 : res === "draw" ? 40 : 10]);
+  if (p.passed) parts.push([`${p.passed} tests`, p.passed * 5]);
+  if (res === "win" && p.doneAt != null) {
+    const speed = Math.max(0, Math.round(100 * (1 - p.doneAt / m.clockMs)));
+    if (speed) parts.push(["speed", speed]);
+  }
+  let pts = parts.reduce((n, [, v]) => n + v, 0) * CLOCK_MULT[m.clock];
+  const mult: [string, number][] = [[`${m.clock} x${CLOCK_MULT[m.clock]}`, 0]];
+  if (m.format === "ai") {
+    pts *= 1.25;
+    mult.push(["boss x1.25", 0]);
+  }
+  const humansAgainst = m.players.some((o) => o.team !== p.team && !o.bot);
+  if (!humansAgainst) {
+    pts *= 0.3;
+    mult.push(["vs ghosts x0.3", 0]);
+  }
+  return { pts: Math.round(pts), parts: [...parts, ...mult] };
+}

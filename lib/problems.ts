@@ -7,11 +7,12 @@ export type Test = { args: unknown[]; expect: unknown; hidden?: boolean };
 export type Problem = {
   id: string;
   title: string;
-  tier: "sprint" | "heat" | "final";
+  tier: "sprint" | "heat" | "final" | "boss";
   fn: string;
   prompt: string;
   starter: string;
   tests: Test[];
+  noEval?: boolean;
 };
 
 export const PROBLEMS: Problem[] = [
@@ -201,13 +202,115 @@ export const PROBLEMS: Problem[] = [
       { args: ["", 5], expect: [], hidden: true },
     ],
   },
+  // ---- boss tickets: AI mode only. Bigger surface, nastier edge cases. ----
+  {
+    id: "calc",
+    title: "Expression Engine",
+    tier: "boss",
+    fn: "calc",
+    noEval: true,
+    prompt:
+      "Spreadsheet formulas. Evaluate an arithmetic expression string with + - * /, parentheses, decimals, unary minus and arbitrary whitespace. Normal precedence, left-to-right associativity. eval() and Function() are disabled in this ticket. Return null for malformed input or division by zero.",
+    starter: "function calc(expr) {\n  \n}\n",
+    tests: [
+      { args: ["1 + 2 * 3"], expect: 7 },
+      { args: ["(1 + 2) * 3"], expect: 9 },
+      { args: ["10 / 4 - 1"], expect: 1.5 },
+      { args: ["-(2 + 3) * -2"], expect: 10 },
+      { args: ["8 - 3 - 2"], expect: 3, hidden: true },
+      { args: ["2 * (3 + (4 - 1)) / 3"], expect: 4, hidden: true },
+      { args: [" 1.5*  2 "], expect: 3, hidden: true },
+      { args: ["1 / 0"], expect: null, hidden: true },
+      { args: ["(1 + 2"], expect: null, hidden: true },
+      { args: ["3 +"], expect: null, hidden: true },
+      { args: ["--4"], expect: 4, hidden: true },
+    ],
+  },
+  {
+    id: "lru",
+    title: "LRU Cache Replay",
+    tier: "boss",
+    fn: "lru",
+    prompt:
+      "Replay a cache log. Given a capacity and a list of ops — [\"put\", key, value] or [\"get\", key] — simulate an LRU cache and return the results of every get, in order (-1 on a miss). get and put both count as a use. Putting an existing key updates its value. When full, evict the least recently used key. Capacity 0 stores nothing.",
+    starter: "function lru(capacity, ops) {\n  \n}\n",
+    tests: [
+      { args: [2, [["put", "a", 1], ["put", "b", 2], ["get", "a"], ["put", "c", 3], ["get", "b"], ["get", "c"]]], expect: [1, -1, 3] },
+      { args: [1, [["put", "x", 9], ["get", "x"], ["put", "y", 8], ["get", "x"], ["get", "y"]]], expect: [9, -1, 8] },
+      { args: [2, [["put", "a", 1], ["put", "a", 5], ["get", "a"]]], expect: [5] },
+      { args: [0, [["put", "a", 1], ["get", "a"]]], expect: [-1], hidden: true },
+      { args: [2, [["put", "a", 1], ["put", "b", 2], ["put", "a", 3], ["put", "c", 4], ["get", "b"], ["get", "a"], ["get", "c"]]], expect: [-1, 3, 4], hidden: true },
+      { args: [3, [["get", "q"], ["put", "q", 0], ["get", "q"]]], expect: [-1, 0], hidden: true },
+    ],
+  },
+  {
+    id: "md-table",
+    title: "Markdown Table Import",
+    tier: "boss",
+    fn: "parseTable",
+    prompt:
+      "Import pasted docs tables. Parse a GitHub-markdown table into an array of row objects keyed by header. Trim cells. Outer pipes are optional. Skip the separator row (---, :--:, etc). Cells that are entirely numeric (e.g. \"42\", \"-3.5\") become numbers; empty cells become null; everything else stays a string. Ignore blank lines. Return [] if there is no header.",
+    starter: "function parseTable(md) {\n  \n}\n",
+    tests: [
+      { args: ["| name | age |\n|---|---|\n| ada | 36 |\n| alan | 41 |"], expect: [{ name: "ada", age: 36 }, { name: "alan", age: 41 }] },
+      { args: ["a | b\n:-: | --:\nx | \n"], expect: [{ a: "x", b: null }] },
+      { args: ["| k | v |\n|--|--|\n| pi | 3.14 |\n| neg | -2 |"], expect: [{ k: "pi", v: 3.14 }, { k: "neg", v: -2 }] },
+      { args: [""], expect: [], hidden: true },
+      { args: ["| id | note |\n| --- | --- |\n\n| 7 | 12 monkeys |\n| 08 | ok |"], expect: [{ id: 7, note: "12 monkeys" }, { id: 8, note: "ok" }], hidden: true },
+      { args: ["| h |\n|---|"], expect: [], hidden: true },
+    ],
+  },
+  {
+    id: "install-order",
+    title: "Install Order",
+    tier: "boss",
+    fn: "installOrder",
+    prompt:
+      "Package manager. deps maps each package to the packages it depends on. Return an install order where every dependency comes before its dependents. Include packages that only appear as dependencies. When several packages are ready at once, install the alphabetically smallest first. Return null if there is a cycle.",
+    starter: "function installOrder(deps) {\n  \n}\n",
+    tests: [
+      { args: [{ app: ["lib", "ui"], ui: ["lib"], lib: [] }], expect: ["lib", "ui", "app"] },
+      { args: [{ b: [], a: [] }], expect: ["a", "b"] },
+      { args: [{ x: ["y"], y: ["x"] }], expect: null },
+      { args: [{ web: ["react", "zod"], react: ["scheduler"] }], expect: ["scheduler", "react", "zod", "web"], hidden: true },
+      { args: [{}], expect: [], hidden: true },
+      { args: [{ a: ["a"] }], expect: null, hidden: true },
+      { args: [{ c: ["b"], b: ["a"], d: ["a"] }], expect: ["a", "b", "c", "d"], hidden: true },
+    ],
+  },
+  {
+    id: "json-path",
+    title: "JSON Path Lite",
+    tier: "boss",
+    fn: "query",
+    prompt:
+      "Config explorer. Resolve a path like \"a.b[0].c\" against an object. Support dot keys, [n] array indexes, and [*] which maps the rest of the path over every array element (and flattens nested [*] results one level per wildcard). Return null when anything along a non-wildcard path is missing. Under [*], elements where the rest of the path is missing are skipped. An empty path returns the object itself.",
+    starter: "function query(obj, path) {\n  \n}\n",
+    tests: [
+      { args: [{ a: { b: [{ c: 1 }] } }, "a.b[0].c"], expect: 1 },
+      { args: [{ items: [{ id: 1 }, { id: 2 }] }, "items[*].id"], expect: [1, 2] },
+      { args: [{ a: 1 }, "a.b.c"], expect: null },
+      { args: [{ x: [5, 6] }, "x[1]"], expect: 6, hidden: true },
+      { args: [{ g: [{ u: [{ n: "a" }, { n: "b" }] }, { u: [{ n: "c" }] }] }, "g[*].u[*].n"], expect: ["a", "b", "c"], hidden: true },
+      { args: [{ l: [{ v: 1 }, {}, { v: 3 }] }, "l[*].v"], expect: [1, 3], hidden: true },
+      { args: [{ k: 2 }, ""], expect: { k: 2 }, hidden: true },
+      { args: [{ x: [1] }, "x[3]"], expect: null, hidden: true },
+    ],
+  },
 ];
 
 export function getProblem(id: string): Problem {
   return PROBLEMS.find((p) => p.id === id) ?? PROBLEMS[0];
 }
 
-export function randomProblemId(seed?: number): string {
-  const i = Math.floor((seed ?? Math.random()) * PROBLEMS.length) % PROBLEMS.length;
-  return PROBLEMS[i].id;
+export type Format = "classic" | "ai";
+
+// Classic draws from the everyday tickets; AI mode only serves bosses.
+export function pool(format: Format): Problem[] {
+  return PROBLEMS.filter((p) => (format === "ai" ? p.tier === "boss" : p.tier !== "boss"));
+}
+
+export function randomProblemId(format: Format = "classic"): string {
+  const list = pool(format);
+  return list[Math.floor(Math.random() * list.length)].id;
 }

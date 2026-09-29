@@ -3,7 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getProblem } from "@/lib/problems";
 import { runTests, type RunOutput } from "@/lib/runner";
 import { FAIL_PENALTY_MS, type MatchView } from "@/lib/game";
-import { api, fmtClock, load, save, type Session, type Stats } from "@/lib/client";
+import { api, EMPTY_STATS, fmtClock, load, save, type Session, type Stats } from "@/lib/client";
+import Copilot from "./Copilot";
 
 type Props = { session: Session; onOver: (v: MatchView, stats: Stats) => void; onAbort: () => void };
 
@@ -26,7 +27,7 @@ export default function Arena({ session, onOver, onAbort }: Props) {
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<{ t: string; red?: boolean } | null>(null);
   const [lost, setLost] = useState(false);
-  const statsRef = useRef<Stats>(load(`stats:${matchId}`, { runs: 0, submits: 0, failed: 0, keys: 0, pasted: 0, typed: 0 }, "session"));
+  const statsRef = useRef<Stats>({ ...EMPTY_STATS, ...load<Partial<Stats>>(`stats:${matchId}`, {}, "session") });
   const [stats, setStats] = useState<Stats>(statsRef.current);
   const bestRef = useRef(0);
   const doneRef = useRef(false);
@@ -63,6 +64,7 @@ export default function Arena({ session, onOver, onAbort }: Props) {
           passed: bestRef.current,
           attempts: statsRef.current.submits,
           failedSubmits: statsRef.current.failed,
+          prompts: statsRef.current.prompts,
           code: taRef.current?.value,
           ...extra,
         });
@@ -248,7 +250,7 @@ export default function Arena({ session, onOver, onAbort }: Props) {
         </div>
       </div>
 
-      <div className="arena">
+      <div className={`arena ${view.format === "ai" ? "with-ai" : ""}`}>
         <aside className="brief">
           <div className="tier">{problem.tier} · ticket #{problem.id}</div>
           <h2>{started ? problem.title : "████████"}</h2>
@@ -268,7 +270,8 @@ export default function Arena({ session, onOver, onAbort }: Props) {
             </>
           )}
           <div className="hint">
-            <kbd>ctrl</kbd>+<kbd>enter</kbd> run · <kbd>ctrl</kbd>+<kbd>shift</kbd>+<kbd>enter</kbd> submit. Paste is fine. Plain JavaScript, runs in your browser.
+            <kbd>ctrl</kbd>+<kbd>enter</kbd> run · <kbd>ctrl</kbd>+<kbd>shift</kbd>+<kbd>enter</kbd> submit
+            {view.format === "ai" ? <> · <kbd>ctrl</kbd>+<kbd>k</kbd> copilot. Boss ticket: the copilot is your co-driver.</> : <>. Paste is fine.</>} Plain JavaScript, runs in your browser.
           </div>
         </aside>
 
@@ -302,7 +305,7 @@ export default function Arena({ session, onOver, onAbort }: Props) {
               <span>runs <b>{stats.runs}</b></span>
               <span>submits <b>{stats.submits}</b></span>
               {penalty > 0 && <span className="pen">penalty +{penalty / 1000}s</span>}
-              <span>paste <b>{aiShare}%</b></span>
+              {view.format === "ai" ? <span>prompts <b>{stats.prompts}</b></span> : <span>paste <b>{aiShare}%</b></span>}
             </div>
           </div>
 
@@ -353,6 +356,24 @@ export default function Arena({ session, onOver, onAbort }: Props) {
             </div>
           )}
         </div>
+
+        {view.format === "ai" && (
+          <Copilot
+            problem={problem}
+            locked={!started || doneRef.current || Boolean(view.result.over)}
+            getCode={() => taRef.current?.value ?? code}
+            applyCode={setCode}
+            lastRun={out}
+            onUsage={(u) =>
+              bump({
+                prompts: statsRef.current.prompts + 1,
+                tokensIn: statsRef.current.tokensIn + u.input,
+                tokensOut: statsRef.current.tokensOut + u.output,
+                aiChars: statsRef.current.aiChars + u.aiChars,
+              })
+            }
+          />
+        )}
       </div>
 
       {!started && (

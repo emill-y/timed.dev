@@ -70,3 +70,47 @@ export async function withLock<T>(name: string, fn: () => Promise<T>): Promise<T
   }
   throw new Error("busy");
 }
+
+// ---- sorted sets (leaderboards) ----
+const g2 = globalThis as unknown as { __timedZ?: Map<string, Map<string, number>> };
+const zmem = (g2.__timedZ ??= new Map());
+const zset = (k: string) => {
+  let z = zmem.get(k);
+  if (!z) zmem.set(k, (z = new Map()));
+  return z;
+};
+
+export async function zincrby(k: string, by: number, member: string): Promise<number> {
+  if (hasRedis) return Number(await redis(["ZINCRBY", k, by, member]));
+  const z = zset(k);
+  const v = (z.get(member) ?? 0) + by;
+  z.set(member, v);
+  return v;
+}
+
+export async function ztop(k: string, n: number): Promise<{ member: string; score: number }[]> {
+  if (hasRedis) {
+    const flat: string[] = await redis(["ZRANGE", k, 0, n - 1, "REV", "WITHSCORES"]);
+    const out = [];
+    for (let i = 0; i < flat.length; i += 2) out.push({ member: flat[i], score: Number(flat[i + 1]) });
+    return out;
+  }
+  return [...zset(k)].map(([member, score]) => ({ member, score })).sort((a, b) => b.score - a.score).slice(0, n);
+}
+
+// 0-based rank, highest score first; null when absent.
+export async function zrank(k: string, member: string): Promise<number | null> {
+  if (hasRedis) {
+    const r = await redis(["ZREVRANK", k, member]);
+    return r == null ? null : Number(r);
+  }
+  const z = zset(k);
+  const me = z.get(member);
+  if (me == null) return null;
+  return [...z.values()].filter((v) => v > me).length;
+}
+
+export async function expire(k: string, sec: number): Promise<void> {
+  if (hasRedis) await redis(["EXPIRE", k, sec]);
+  // In-memory boards are process-lifetime anyway.
+}

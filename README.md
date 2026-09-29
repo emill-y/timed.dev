@@ -24,9 +24,13 @@ A separate format (with its own queue and leaderboard) built around **boss ticke
 - **Context and code are automatic.** Each prompt carries your current code and your last test run. The reply's code block is auto-applied (with undo).
 - **Scoring.** Results show prompts used and tokens spent. Boss wins pay x1.25.
 
-## Points & leaderboard
+## Accounts, points & leaderboard
 
-Monkeytype-style. There's no signup: typing a handle claims it for your browser (a random secret in localStorage; the server stores only its hash).
+**Real accounts.** Sign up with a username and password; guests can still play, unranked. Passwords are hashed with scrypt (per-user salt). Sessions are random tokens in an `httpOnly` cookie, and the server stores only their SHA-256 hash. Login and signup are rate-limited per IP and per username, and a guest can't queue under a registered username.
+
+**Points can't be faked.** Every RUN and SUBMIT is judged **on the server**. Player code runs in [QuickJS](https://github.com/justjake/quickjs-emscripten) compiled to WebAssembly: a separate JS engine with no access to Node, the network or the filesystem, capped at 24 MB of memory, 1s per test and 4s per submission. Progress bars, finish times, failed-submit penalties, wins and points all come from judged results. Browsers can't report scores, and opponents never learn your seat id.
+
+Monkeytype-style scoring:
 
 | | points |
 |---|---|
@@ -35,7 +39,7 @@ Monkeytype-style. There's no signup: typing a handle claims it for your browser 
 | speed bonus (wins) | up to +100, scaled by clock time left |
 | clock multiplier | bullet x1.5 · blitz x1.2 · rapid x1 |
 | AI mode | x1.25 |
-| no human opponents (ghosts only) | x0.3 |
+| no human opponents (ghosts only) | x0.3, and only the first time you clear that ticket |
 
 Boards: all-time, today, classic, AI mode, at `/leaderboard`. Points are awarded server-side when a match resolves, once per match.
 
@@ -44,10 +48,10 @@ Keyboard first: `enter` to queue, `ctrl+enter` to run, `ctrl+shift+enter` to sub
 ## Stack
 
 - Next.js 15 (App Router) + React 19 + TypeScript. No UI kit, just hand-written CSS.
-- Player code runs in a sandboxed **Web Worker in the player's own browser**, with a 3s kill switch for infinite loops. The server never executes user code.
+- Player code is judged server-side in a QuickJS/WASM sandbox (`lib/judge.ts`, route `/api/match/[id]/judge`). It ships browser-ish shims (`URLSearchParams`, `structuredClone`) since tickets commonly reach for them.
 - Matchmaking and match state go through two small API routes (`/api/queue` and `/api/match/[id]`), polled once a second.
 - The AI copilot uses the official Anthropic and OpenAI JS SDKs in the browser, with `dangerouslyAllowBrowser`. That's safe here because the only key involved is the player's own, kept on the player's machine.
-- Storage: **Upstash Redis** over REST when configured (queue, matches, accounts, leaderboards). Without it, state lives in process memory, which is fine for `npm run dev`. On serverless, though, separate instances don't share memory, so live human-vs-human matches need Redis.
+- Storage: **Upstash Redis** over REST when configured (queue, matches, accounts, sessions, leaderboards). **Required in production:** without it, accounts and points live in one server instance's memory and vanish on redeploy. Without it, state lives in process memory, which is fine for `npm run dev`. On serverless, though, separate instances don't share memory, so live human-vs-human matches need Redis.
 
 ## Run locally
 
@@ -70,6 +74,7 @@ Tickets live in `lib/problems.ts`. Each one has a prompt, a stub, and tests (mar
 
 ## Known limits (MVP)
 
-- Players report their own test results, so a determined cheater can lie, and that also means leaderboard points can be faked. The fix is server-side verification in an isolated runner.
-- Handles are tied to one browser. Clearing site data loses the handle; there's no account recovery yet.
+- No password reset yet (there's no email on file).
+- Nothing stops one person from running two accounts and throwing matches between them. Ghost-match farming is capped (see the table above), but human-vs-human collusion isn't detected.
+- A few pathological built-ins (e.g. filling a multi-million-element array) can keep the judge busy for several seconds before it hits the memory cap. Per-seat rate limits and one-judge-at-a-time bound the cost.
 - Only JavaScript for now. Python via Pyodide is the obvious next step.

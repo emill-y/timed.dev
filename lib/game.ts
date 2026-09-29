@@ -27,14 +27,15 @@ export const FAIL_PENALTY_MS = 10000;
 export type Bot = { finishFrac: number; finishes: boolean; seed: number };
 
 export type Player = {
-  id: string;
+  id: string; // secret: only this player's browser knows it
   name: string;
-  handle?: string; // verified account; only these earn points
+  userId?: string; // logged-in account; only these earn points
   team: 0 | 1;
   bot?: Bot;
-  prompts?: number; // AI-mode copilot calls
-  passed: number;
-  attempts: number;
+  prompts?: number; // AI-mode copilot calls (self-reported, display only)
+  passed: number; // best judged score
+  attempts: number; // judged submits
+  failed?: number; // judged submits that weren't all-green
   doneAt?: number; // ms after start, penalties included
   code?: string;
   lastSeen: number;
@@ -148,20 +149,30 @@ export function resolve(m: Match, now = Date.now()): Result {
   return { over: false, winner: null, teamTime, teamBest };
 }
 
-// What a given viewer is allowed to see: teammates' code, never opponents'.
+// What a given viewer is allowed to see. Player ids are secrets (they
+// authorize submits), so everyone else gets a positional id; teammates'
+// code is shared, opponents' never is.
 export function viewFor(m: Match, playerId: string) {
   const me = m.players.find((p) => p.id === playerId);
   const now = Date.now();
   const live = liveMatch(m, now);
+  const { awards, ...rest } = live;
   return {
-    ...live,
+    ...rest,
     now,
     result: resolve(live, now),
-    players: live.players.map((p) => ({
-      ...p,
-      bot: undefined,
-      handle: undefined,
-      ranked: Boolean(p.handle),
+    myAward: awards?.[playerId] ?? null,
+    settled: Boolean(awards),
+    players: live.players.map((p, i) => ({
+      id: `p${i}`,
+      you: p.id === playerId,
+      name: p.name,
+      team: p.team,
+      passed: p.passed,
+      attempts: p.attempts,
+      prompts: p.prompts,
+      doneAt: p.doneAt,
+      ranked: Boolean(p.userId),
       isBot: Boolean(p.bot),
       code: me && p.team === me.team && p.id !== me.id ? p.code : undefined,
     })),

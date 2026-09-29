@@ -9,7 +9,7 @@ const fmtK = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n)
 type Props = { view: MatchView; stats: Stats; playerId: string; ranked: boolean; onAward: () => void; onAgain: () => void; onHome: () => void };
 
 export default function Result({ view, stats, playerId, ranked, onAward, onAgain, onHome }: Props) {
-  const [award, setAward] = useState<Award | null>(view.awards?.[playerId] ?? null);
+  const [award, setAward] = useState<Award | null>(view.myAward);
 
   // Points settle on the server a beat after the flag; poll briefly for them.
   useEffect(() => {
@@ -20,7 +20,7 @@ export default function Result({ view, stats, playerId, ranked, onAward, onAgain
       try {
         const r = await fetch(`/api/match/${view.id}?p=${playerId}`, { cache: "no-store" });
         const v: MatchView = await r.json();
-        if (alive && v.awards?.[playerId]) return setAward(v.awards[playerId]);
+        if (alive && v.myAward) return setAward(v.myAward);
       } catch {}
       if (alive && ++n < 8) setTimeout(tick, 700);
     };
@@ -33,7 +33,7 @@ export default function Result({ view, stats, playerId, ranked, onAward, onAgain
   useEffect(() => {
     if (award) onAward();
   }, [award]); // eslint-disable-line react-hooks/exhaustive-deps
-  const me = view.players.find((p) => p.id === playerId)!;
+  const me = view.players.find((p) => p.you)!;
   const { winner, teamTime, teamBest } = view.result;
   const outcome = winner == null ? "draw" : winner === me.team ? "win" : "loss";
   const problem = getProblem(view.problemId);
@@ -70,7 +70,7 @@ export default function Result({ view, stats, playerId, ranked, onAward, onAgain
 
       <div className="points">
         <span className="plus">{award ? `+${award.pts}` : "+…"}</span>
-        <span className="unit">pts{ranked ? "" : " (unranked: pick a handle to bank them)"}</span>
+        <span className="unit">pts{ranked ? "" : " (guest: log in to bank points)"}</span>
         {award && (
           <span className="parts">
             {award.parts.map(([k, v]) => (
@@ -100,9 +100,9 @@ export default function Result({ view, stats, playerId, ranked, onAward, onAgain
       <div className="board">
         <div className="r h"><span>#</span><span>driver</span><span>time</span><span>tests</span><span>{view.format === "ai" ? "prompts" : "subs"}</span></div>
         {order.map((p, i) => (
-          <div key={p.id} className={`r ${p.id === playerId ? "me" : ""}`}>
+          <div key={p.id} className={`r ${p.you ? "me" : ""}`}>
             <span style={{ color: p.team === 0 ? "var(--a)" : "var(--b)" }}>{i + 1}</span>
-            <span>{p.name}{p.isBot ? " · ghost" : ""}</span>
+            <span>{p.name}{p.isBot ? " · ghost" : p.ranked ? "" : " · guest"}</span>
             <span>{fmtTime(p.doneAt)}</span>
             <span>{p.passed}/{view.total}</span>
             <span>{view.format === "ai" ? (p.isBot ? "—" : p.prompts ?? 0) : p.attempts}</span>

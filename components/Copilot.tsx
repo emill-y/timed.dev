@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import type { Problem } from "@/lib/problems";
-import type { RunOutput } from "@/lib/runner";
+import type { RunOutput } from "@/lib/judge";
 import { AiError, askCopilot, extractCode, loadAi, type AiSettings, type Turn, type Usage } from "@/lib/ai";
 import KeySettings from "./KeySettings";
 

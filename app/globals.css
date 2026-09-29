@@ -303,3 +303,19 @@ kbd { background: var(--dimmer); color: var(--text); padding: 1px 6px; font-fami
   .lb-row { grid-template-columns: 36px 1fr 80px 50px; }
   .lb-row > :nth-child(n+5) { display: none; }
 }
+
+/* ---------- v3: accounts ---------- */
+button.nav { background: none; cursor: pointer; font-family: var(--mono); }
+.nav.hot { color: var(--yellow); border-color: var(--yellow); }
+.link { color: var(--text); text-decoration: underline; font-size: inherit; }
+.link:hover { color: var(--yellow); }
+.name .driver { font-size: 18px; color: var(--yellow); font-weight: 500; }
+.auth { display: flex; flex-direction: column; gap: 14px; }
+.auth-tabs { display: flex; gap: 4px; margin-left: -8px; }
+.auth label { display: flex; flex-direction: column; gap: 4px; }
+.auth label span { color: var(--dim); font-size: 11px; letter-spacing: 2px; text-transform: uppercase; }
+.auth input { background: transparent; border: 0; border-bottom: 2px solid var(--dimmer); outline: none; padding: 6px 2px; font-size: 17px; caret-color: var(--red); }
+.auth input:focus { border-color: var(--red); }
+.auth .fine { color: var(--dim); font-size: 12px; margin: 0; }
+.auth .bad { color: var(--red); margin: 0; font-size: 13px; }
+.lb .why a { color: var(--yellow); }

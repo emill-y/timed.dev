@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { get, set, withLock, hasRedis } from "@/lib/store";
-import { claim, cleanHandle } from "@/lib/accounts";
+import { getUser } from "@/lib/accounts";
+import { currentUser } from "@/lib/auth";
 import {
   BOT_FILL_MS, CLOCKS, MODES, STALE_MS, createMatch, makeBot, uid,
   type ClockId, type Format, type Mode, type Player,
@@ -8,7 +9,7 @@ import {
 
 export const dynamic = "force-dynamic";
 
-type Ticket = { id: string; name: string; handle?: string; party?: string; joinedAt: number; lastSeen: number };
+type Ticket = { id: string; name: string; userId?: string; party?: string; joinedAt: number; lastSeen: number };
 type Assign = { matchId: string; playerId: string };
 
 const clean = (s: unknown, n: number) => String(s ?? "").replace(/[^\w.\-]/g, "").slice(0, n);
@@ -31,7 +32,7 @@ function toPlayers(teams: Ticket[][][], per: number): Player[] {
   teams.forEach((groups, ti) => {
     const team = ti as 0 | 1;
     for (const t of groups.flat()) {
-      players.push({ id: t.id, name: t.name, handle: t.handle, team, passed: 0, attempts: 0, lastSeen: Date.now() });
+      players.push({ id: t.id, name: t.name, userId: t.userId, team, passed: 0, attempts: 0, lastSeen: Date.now() });
       taken.add(t.name);
     }
     while (players.filter((p) => p.team === team).length < per) {
@@ -48,15 +49,15 @@ export async function POST(req: Request) {
   const format: Format = body.format === "ai" ? "ai" : "classic";
   const mode: Mode = body.mode === "2v2" ? "2v2" : "1v1";
   const clock: ClockId = CLOCKS.some((c) => c.id === body.clock) ? body.clock : "blitz";
-  let name = cleanHandle(body.name);
-  let handle: string | undefined;
-  // A handle plus the browser's secret = ranked. Anything else plays unranked.
-  if (name && typeof body.token === "string") {
-    const c = await claim(name, body.token);
-    if (c === "taken") return NextResponse.json({ status: "error", error: `handle "${name}" is already claimed on another device` }, { status: 409 });
-    if (c === "ok") handle = name;
+  // Logged in = ranked under your account name. Guests play unranked, and
+  // can't borrow a registered username.
+  const user = await currentUser();
+  const userId = user?.username.toLowerCase();
+  let name = user?.username ?? clean(body.name, 18);
+  if (!user && name && (await getUser(name))) {
+    return NextResponse.json({ status: "error", error: `"${name}" is a registered account. Log in to play as it.` }, { status: 409 });
   }
-  name ||= "anon_" + uid().slice(0, 4);
+  name ||= "guest_" + uid().slice(0, 4);
   const party = mode === "2v2" ? clean(body.party, 12).toLowerCase() || undefined : undefined;
   const id: string = clean(body.ticket, 16) || uid() + uid();
   const size = MODES[mode].size;
@@ -66,7 +67,7 @@ export async function POST(req: Request) {
 
   // Practice: straight into a match against bots.
   if (body.practice) {
-    const teams = [[[{ id, name, handle, joinedAt: now, lastSeen: now }]], []];
+    const teams = [[[{ id, name, userId, joinedAt: now, lastSeen: now }]], []];
     const match = createMatch(format, mode, clock, toPlayers(teams, per));
     await set(`match:${match.id}`, match, 3600);
     return NextResponse.json({ status: "matched", matchId: match.id, playerId: id });
@@ -80,7 +81,7 @@ export async function POST(req: Request) {
       let queue = ((await get<Ticket[]>(qkey)) ?? []).filter((t) => now - t.lastSeen < STALE_MS);
       let me = queue.find((t) => t.id === id);
       if (!me) {
-        me = { id, name, handle, party, joinedAt: now, lastSeen: now };
+        me = { id, name, userId, party, joinedAt: now, lastSeen: now };
         queue.push(me);
       }
       me.lastSeen = now;

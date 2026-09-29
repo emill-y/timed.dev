@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { CLOCKS } from "@/lib/game";
-import { fmtTime, type Cfg, type HistoryItem, type Profile } from "@/lib/client";
+import { fmtTime, type Cfg, type HistoryItem, type Me } from "@/lib/client";
 import { loadAi, maskKey, type AiSettings } from "@/lib/ai";
 import KeySettings from "./KeySettings";
 
@@ -9,13 +9,15 @@ type Props = {
   cfg: Cfg;
   setCfg: (c: Cfg) => void;
   history: HistoryItem[];
-  profile: Profile | null;
+  user: Me | null;
   error: string | null;
+  modalOpen: boolean;
+  onAuth: (tab: "login" | "signup") => void;
   onFind: () => void;
   onPractice: () => void;
 };
 
-export default function Home({ cfg, setCfg, history, profile, error, onFind, onPractice }: Props) {
+export default function Home({ cfg, setCfg, history, user, error, modalOpen, onAuth, onFind, onPractice }: Props) {
   const [ai, setAi] = useState<AiSettings | null>(null);
   const [keysOpen, setKeysOpen] = useState(false);
   const isAi = cfg.format === "ai";
@@ -31,6 +33,7 @@ export default function Home({ cfg, setCfg, history, profile, error, onFind, onP
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (modalOpen) return;
       if (keysOpen) {
         if (e.key === "Escape") setKeysOpen(false);
         return;
@@ -113,16 +116,23 @@ export default function Home({ cfg, setCfg, history, profile, error, onFind, onP
         </p>
 
         <div className="go-row">
-          <label className="name">
-            <span>handle</span>
-            <input
-              value={cfg.name}
-              onChange={(e) => setCfg({ ...cfg, name: e.target.value.replace(/[^\w.-]/g, "").slice(0, 18) })}
-              placeholder="your_handle"
-              spellCheck={false}
-              autoFocus
-            />
-          </label>
+          {user ? (
+            <div className="name">
+              <span>driver</span>
+              <b className="driver">{user.username}</b>
+            </div>
+          ) : (
+            <label className="name">
+              <span>guest</span>
+              <input
+                value={cfg.name}
+                onChange={(e) => setCfg({ ...cfg, name: e.target.value.replace(/[^\w.-]/g, "").slice(0, 18) })}
+                placeholder="guest_name"
+                spellCheck={false}
+                autoFocus
+              />
+            </label>
+          )}
           <button className="btn-go" onClick={() => go(false)}>
             <span>{needsKey ? "add api key" : cfg.mode === "2v2" ? "find squad" : "find opponent"}</span>
           </button>
@@ -132,16 +142,21 @@ export default function Home({ cfg, setCfg, history, profile, error, onFind, onP
         <div className="status-row">
           {error ? (
             <span className="bad">{error}</span>
-          ) : profile ? (
+          ) : user ? (
             <>
-              <span><b>{profile.points.toLocaleString()}</b> pts</span>
-              <span>rank <b>{profile.rank ? `#${profile.rank}` : "unranked"}</b></span>
-              <span><b>{profile.wins}</b>W / <b>{profile.losses}</b>L / <b>{profile.draws}</b>D</span>
-              {profile.best.classic != null && <span>best classic <b>{fmtTime(profile.best.classic)}</b></span>}
-              {profile.best.ai != null && <span>best ai <b>{fmtTime(profile.best.ai)}</b></span>}
+              <span><b>{user.points.toLocaleString()}</b> pts</span>
+              <span>rank <b>{user.rank ? `#${user.rank}` : "unranked"}</b></span>
+              <span><b>{user.wins}</b>W / <b>{user.losses}</b>L / <b>{user.draws}</b>D</span>
+              {user.best.classic != null && <span>best classic <b>{fmtTime(user.best.classic)}</b></span>}
+              {user.best.ai != null && <span>best ai <b>{fmtTime(user.best.ai)}</b></span>}
             </>
           ) : (
-            <span>Pick a handle to earn points and get on the <a href="/leaderboard">leaderboard</a>. It&apos;s tied to this browser, no signup.</span>
+            <span>
+              Playing as a guest (no points).{" "}
+              <button className="link" onClick={() => onAuth("signup")}>Sign up</button> or{" "}
+              <button className="link" onClick={() => onAuth("login")}>log in</button> to earn points and get on the{" "}
+              <a href="/leaderboard">leaderboard</a>.
+            </span>
           )}
         </div>
         <p className="mobile-note">Heads up: matches are built for a keyboard and a big screen.</p>
@@ -159,7 +174,7 @@ export default function Home({ cfg, setCfg, history, profile, error, onFind, onP
               <div><b>01 / the ticket</b>A realistic, loosely specified task. Some edge cases are hidden. Read it like a PR you have to ship.</div>
               <div><b>02 / any tools</b>Paste from your favourite model if you want. Speed and judgement are the skills being tested.</div>
               <div><b>03 / run vs submit</b><i>RUN</i> checks the visible tests for free. <i>SUBMIT</i> runs the hidden ones too, and each failed submit costs <i>+10s</i>.</div>
-              <div><b>04 / points</b>Wins, tests and speed earn points. Shorter clocks pay more. Ghost matches pay <i>x0.3</i>. Climb the <a href="/leaderboard">board</a>.</div>
+              <div><b>04 / points</b>Every submit is judged <i>on the server</i>, so points are real. Wins, tests and speed score; shorter clocks pay more. Climb the <a href="/leaderboard">board</a>.</div>
             </>
           )}
         </div>

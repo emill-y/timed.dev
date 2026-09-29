@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { zrank, ztop } from "@/lib/store";
 import { getUser, today } from "@/lib/accounts";
+import { currentUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +31,7 @@ export async function GET(req: Request) {
       };
     }),
   );
-  const me = q.get("me");
-  const myRank = me ? await zrank(key, me) : null;
-  return NextResponse.json({ board, rows, me: me && myRank != null ? { rank: myRank + 1 } : null });
+  const me = await currentUser();
+  const myRank = me ? await zrank(key, me.username) : null;
+  return NextResponse.json({ board, rows, me: me ? { username: me.username, rank: myRank == null ? null : myRank + 1 } : null });
 }

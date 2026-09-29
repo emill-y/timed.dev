@@ -1,9 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
-import { fmtTime, load, type Cfg } from "@/lib/client";
+import { fmtTime } from "@/lib/client";
 
 type Row = { rank: number; handle: string; points: number; wins: number; matches: number; bestClassic: number | null; bestAi: number | null };
-type Data = { board: string; rows: Row[]; me: { rank: number } | null };
+type Data = { board: string; rows: Row[]; me: { username: string; rank: number | null } | null };
 
 const BOARDS = [
   { id: "all", label: "all-time" },
@@ -15,22 +15,19 @@ const BOARDS = [
 export default function Leaderboard() {
   const [board, setBoard] = useState("all");
   const [data, setData] = useState<Data | null>(null);
-  const [me, setMe] = useState("");
-
-  useEffect(() => setMe(load<Partial<Cfg>>("cfg", {}).name ?? ""), []);
-
   useEffect(() => {
     let alive = true;
     setData(null);
-    fetch(`/api/leaderboard?board=${board}${me ? `&me=${encodeURIComponent(me)}` : ""}`, { cache: "no-store" })
+    fetch(`/api/leaderboard?board=${board}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((d: Data) => alive && setData(d))
       .catch(() => alive && setData({ board, rows: [], me: null }));
     return () => {
       alive = false;
     };
-  }, [board, me]);
+  }, [board]);
 
+  const me = data?.me?.username ?? "";
   const mine = data?.rows.find((r) => r.handle.toLowerCase() === me.toLowerCase());
 
   return (
@@ -54,8 +51,9 @@ export default function Leaderboard() {
           <span className="r">Leader</span>board
         </h1>
         {data?.me && !mine && (
-          <p className="why">You ({me}) are <b>#{data.me.rank}</b> on this board.</p>
+          <p className="why">{data.me.rank ? <>You ({me}) are <b>#{data.me.rank}</b> on this board.</> : <>You ({me}) aren&apos;t on this board yet.</>}</p>
         )}
+        {data && !data.me && <p className="why">Every submit is judged server-side. <a href="/">Log in and race</a> to get on the board.</p>}
 
         <div className="lb-table">
           <div className="lb-row h">
@@ -65,7 +63,7 @@ export default function Leaderboard() {
           {!data && <div className="lb-row muted"><span /><span>loading…</span></div>}
           {data && data.rows.length === 0 && (
             <div className="lb-empty">
-              Empty grid. Finish a match with a handle set and you&apos;re on it.
+              Empty grid. Finish a match while logged in and you&apos;re on it.
             </div>
           )}
           {data?.rows.map((r) => (

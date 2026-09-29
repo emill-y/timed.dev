@@ -7,23 +7,12 @@ export type Stats = {
 };
 export const EMPTY_STATS: Stats = { runs: 0, submits: 0, failed: 0, keys: 0, pasted: 0, typed: 0, prompts: 0, tokensIn: 0, tokensOut: 0, aiChars: 0 };
 
-export type Profile = {
-  handle: string; points: number; byFormat: { classic: number; ai: number };
+export type Me = {
+  username: string; points: number; byFormat: { classic: number; ai: number };
   wins: number; losses: number; draws: number; matches: number;
   best: { classic?: number; ai?: number }; rank: number | null;
 };
 
-// Secret that proves this browser owns its handle. Never shown, never shared.
-export function deviceToken(): string {
-  let t = load<string>("token", "");
-  if (!t) {
-    const b = new Uint8Array(24);
-    crypto.getRandomValues(b);
-    t = Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
-    save("token", t);
-  }
-  return t;
-}
 export type HistoryItem = { r: "W" | "L" | "D"; t: number | null; p: string; m: string; at: number };
 
 export function load<T>(k: string, fallback: T, store: "local" | "session" = "local"): T {

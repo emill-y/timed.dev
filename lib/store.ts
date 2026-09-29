@@ -50,7 +50,7 @@ async function setNX(k: string, ttlMs: number): Promise<boolean> {
   return true;
 }
 
-async function del(k: string): Promise<void> {
+export async function del(k: string): Promise<void> {
   if (hasRedis) await redis(["DEL", k]);
   else mem.delete(k);
 }
@@ -113,4 +113,26 @@ export async function zrank(k: string, member: string): Promise<number | null> {
 export async function expire(k: string, sec: number): Promise<void> {
   if (hasRedis) await redis(["EXPIRE", k, sec]);
   // In-memory boards are process-lifetime anyway.
+}
+
+// Fixed-window counter; returns the count after incrementing.
+export async function incr(k: string, ttlSec: number): Promise<number> {
+  if (hasRedis) {
+    const n = Number(await redis(["INCR", k]));
+    if (n === 1) await redis(["EXPIRE", k, ttlSec]);
+    return n;
+  }
+  const cur = Number(memGet(k) ?? 0) + 1;
+  const e = mem.get(k);
+  mem.set(k, { v: String(cur), exp: e && cur > 1 ? e.exp : Date.now() + ttlSec * 1000 });
+  return cur;
+}
+
+// SET NX with a TTL, for one-shot claims (usernames, per-player judge slots).
+export async function claimKey(k: string, v: unknown, ttlSec: number): Promise<boolean> {
+  const raw = JSON.stringify(v);
+  if (hasRedis) return (await redis(["SET", k, raw, "NX", "EX", ttlSec])) === "OK";
+  if (memGet(k) != null) return false;
+  mem.set(k, { v: raw, exp: Date.now() + ttlSec * 1000 });
+  return true;
 }

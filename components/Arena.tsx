@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getProblem } from "@/lib/problems";
-import { runTests, type RunOutput } from "@/lib/runner";
+import type { RunOutput } from "@/lib/judge";
 import { FAIL_PENALTY_MS, type MatchView } from "@/lib/game";
 import { api, EMPTY_STATS, fmtClock, load, save, type Session, type Stats } from "@/lib/client";
 import Copilot from "./Copilot";
@@ -29,7 +29,6 @@ export default function Arena({ session, onOver, onAbort }: Props) {
   const [lost, setLost] = useState(false);
   const statsRef = useRef<Stats>({ ...EMPTY_STATS, ...load<Partial<Stats>>(`stats:${matchId}`, {}, "session") });
   const [stats, setStats] = useState<Stats>(statsRef.current);
-  const bestRef = useRef(0);
   const doneRef = useRef(false);
   const overRef = useRef(false);
   const taRef = useRef<HTMLTextAreaElement>(null);
@@ -37,10 +36,13 @@ export default function Arena({ session, onOver, onAbort }: Props) {
   const lastSynced = useRef("");
 
   const problem = useMemo(() => (view ? getProblem(view.problemId) : null), [view?.problemId]); // eslint-disable-line react-hooks/exhaustive-deps
-  const me = view?.players.find((p) => p.id === playerId);
+  const me = view?.players.find((p) => p.you);
   const started = view ? now + offset >= view.startAt : false;
   const elapsed = view ? now + offset - view.startAt : 0;
   const remaining = view ? view.clockMs - elapsed : 0;
+
+  // After a refresh, a seat that already finished stays locked.
+  if (me?.doneAt != null) doneRef.current = true;
 
   const bump = (patch: Partial<Stats>) => {
     statsRef.current = { ...statsRef.current, ...patch };
@@ -61,9 +63,6 @@ export default function Arena({ session, onOver, onAbort }: Props) {
       try {
         const v = await api<MatchView>(`/api/match/${matchId}`, {
           playerId,
-          passed: bestRef.current,
-          attempts: statsRef.current.submits,
-          failedSubmits: statsRef.current.failed,
           prompts: statsRef.current.prompts,
           code: taRef.current?.value,
           ...extra,
@@ -132,29 +131,35 @@ export default function Arena({ session, onOver, onAbort }: Props) {
     async (submit: boolean) => {
       if (!problem || busy || !started || overRef.current || doneRef.current) return;
       setBusy(true);
-      const res = await runTests(taRef.current?.value ?? "", problem, submit);
-      setOut(res);
-      setOutKind(submit ? "submit" : "run");
-      const passed = res.results.filter((r) => r.pass).length;
-      bestRef.current = Math.max(bestRef.current, passed);
-      if (submit) {
-        const allGreen = !res.fatal && passed === problem.tests.length;
-        bump({ submits: statsRef.current.submits + 1, failed: statsRef.current.failed + (allGreen ? 0 : 1) });
-        if (allGreen) {
-          doneRef.current = true;
-          setToast({ t: "all green" });
-          await report({ done: true });
+      // Judged on the server: that's the result that counts.
+      type Judged = RunOutput & { allGreen: boolean; failed: number; attempts: number; done: boolean };
+      try {
+        const res = await api<Judged>(`/api/match/${matchId}/judge`, {
+          playerId,
+          kind: submit ? "submit" : "run",
+          code: taRef.current?.value ?? "",
+        });
+        setOut(res);
+        setOutKind(submit ? "submit" : "run");
+        if (submit) {
+          bump({ submits: res.attempts, failed: res.failed });
+          if (res.allGreen) {
+            doneRef.current = true;
+            setToast({ t: "all green" });
+          } else {
+            setToast({ t: `+${FAIL_PENALTY_MS / 1000}s penalty`, red: true });
+          }
         } else {
-          setToast({ t: `+${FAIL_PENALTY_MS / 1000}s penalty`, red: true });
-          await report();
+          bump({ runs: statsRef.current.runs + 1 });
         }
-      } else {
-        bump({ runs: statsRef.current.runs + 1 });
-        await report();
+        report();
+      } catch (e) {
+        setOut({ results: [], logs: [], fatal: (e as Error).message });
+      } finally {
+        setBusy(false);
       }
-      setBusy(false);
     },
-    [problem, busy, started, report],
+    [problem, busy, started, report, matchId, playerId],
   );
 
   // Global shortcuts.
@@ -216,7 +221,7 @@ export default function Arena({ session, onOver, onAbort }: Props) {
   const countdown = Math.ceil((view.startAt - (now + offset)) / 1000);
   const teams = [0, 1].map((t) => view.players.filter((p) => p.team === t));
   const myTeam = me?.team ?? 0;
-  const mate = view.mode === "2v2" ? view.players.find((p) => p.team === myTeam && p.id !== playerId) : undefined;
+  const mate = view.mode === "2v2" ? view.players.find((p) => p.team === myTeam && !p.you) : undefined;
   const visible = problem.tests.filter((t) => !t.hidden);
   const hiddenCount = problem.tests.length - visible.length;
   const penalty = stats.failed * FAIL_PENALTY_MS;
@@ -231,9 +236,10 @@ export default function Arena({ session, onOver, onAbort }: Props) {
             <div className="team-label">{t === myTeam ? "your team" : "rivals"}</div>
             {teams[t].map((p) => (
               <div className="lane" key={p.id}>
-                <span className={`who ${p.id === playerId ? "me" : ""}`}>
+                <span className={`who ${p.you ? "me" : ""}`}>
                   {p.name}
-                  {p.id === playerId && <span className="tag">you</span>}
+                  {p.you && <span className="tag">you</span>}
+                  {!p.you && !p.isBot && !p.ranked && <span className="tag">guest</span>}
                   {p.isBot && <span className="tag">ghost</span>}
                 </span>
                 <span className={`bar ${p.doneAt != null ? "done" : ""}`}>
@@ -310,7 +316,8 @@ export default function Arena({ session, onOver, onAbort }: Props) {
           </div>
 
           <div className="console">
-            {!out && <div className="muted">{started ? "run your code to see results." : "waiting for green light…"}</div>}
+            {busy && <div className="muted">judging on the server…</div>}
+            {!busy && !out && <div className="muted">{started ? "run your code to see results. Tests are judged server-side." : "waiting for green light…"}</div>}
             {out && (
               <>
                 <div className="sum" style={{ color: out.results.length && out.results.every((r) => r.pass) && !out.fatal ? "var(--green)" : "var(--red)" }}>

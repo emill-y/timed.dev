@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { api, deviceToken, type Cfg, type Session } from "@/lib/client";
+import { api, type Cfg, type Session } from "@/lib/client";
 
 type Waiting = { status: "waiting"; ticket: string; inQueue: number; size: number; waited: number; botFillMs: number; shared: boolean };
 type Matched = { status: "matched"; matchId: string; playerId: string };
@@ -17,14 +17,14 @@ export default function Queue({ cfg, onMatched, onCancel, onError }: Props) {
     let alive = true;
     const tick = async () => {
       try {
-        const r = await api<Waiting | Matched>("/api/queue", { ...cfg, token: deviceToken(), ticket: ticket.current });
+        const r = await api<Waiting | Matched>("/api/queue", { ...cfg, ticket: ticket.current });
         if (!alive) return;
         if (r.status === "matched") return onMatched({ matchId: r.matchId, playerId: r.playerId });
         ticket.current = r.ticket;
         setState(r);
       } catch (e) {
         const msg = (e as Error).message;
-        if (alive && /claimed/.test(msg)) return onError(msg);
+        if (alive && /registered account/.test(msg)) return onError(msg);
       }
       if (alive) setTimeout(tick, 1000);
     };

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { get, set, withLock } from "@/lib/store";
-import { FAIL_PENALTY_MS, resolve, liveMatch, viewFor, type Match } from "@/lib/game";
+import { resolve, liveMatch, viewFor, type Match } from "@/lib/game";
 import { awardIfOver } from "@/lib/accounts";
 
 export const dynamic = "force-dynamic";
@@ -23,8 +23,8 @@ export async function GET(req: Request, { params }: Ctx) {
   return NextResponse.json(viewFor(m, me));
 }
 
-// Progress report from a player's browser.
-// { playerId, passed, attempts, failedSubmits, done, code }
+// Heartbeat from a player's browser: code (shared with teammates) and the
+// copilot prompt count. Scores never come through here; see ./judge.
 export async function POST(req: Request, { params }: Ctx) {
   const { id } = await params;
   const body = await req.json().catch(() => ({}));
@@ -38,16 +38,9 @@ export async function POST(req: Request, { params }: Ctx) {
 
       const over = resolve(liveMatch(m, now), now).over;
       if (!over && now >= m.startAt) {
-        const passed = Math.max(0, Math.min(m.total, Number(body.passed) || 0));
-        p.passed = Math.max(p.passed, passed);
-        p.attempts = Math.max(p.attempts, Number(body.attempts) || 0);
-        p.prompts = Math.max(p.prompts ?? 0, Number(body.prompts) || 0);
-        if (body.done && passed === m.total && p.doneAt == null) {
-          const failed = Math.max(0, Number(body.failedSubmits) || 0);
-          p.doneAt = now - m.startAt + failed * FAIL_PENALTY_MS;
-        }
+        p.prompts = Math.max(p.prompts ?? 0, Math.min(999, Number(body.prompts) || 0));
+        if (typeof body.code === "string" && p.doneAt == null) p.code = body.code.slice(0, 20000);
       }
-      if (typeof body.code === "string") p.code = body.code.slice(0, 20000);
       p.lastSeen = now;
       await awardIfOver(m, now);
       await set(`match:${id}`, m, 3600);

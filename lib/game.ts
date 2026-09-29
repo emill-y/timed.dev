@@ -1,4 +1,5 @@
 import { getProblem, randomProblemId, type Format } from "./problems";
+import { HARD_MODES, type HardMode } from "./glitch";
 export type { Format };
 
 export type Mode = "1v1" | "2v2";
@@ -47,6 +48,7 @@ export type Match = {
   id: string;
   problemId: string;
   format: Format;
+  hard: HardMode[];
   mode: Mode;
   clock: ClockId;
   clockMs: number;
@@ -84,13 +86,14 @@ export function makeBot(team: 0 | 1, taken: Set<string>): Player {
   };
 }
 
-export function createMatch(format: Format, mode: Mode, clock: ClockId, players: Player[]): Match {
+export function createMatch(format: Format, mode: Mode, clock: ClockId, players: Player[], hard: HardMode[] = []): Match {
   const problemId = randomProblemId(format);
   const c = CLOCKS.find((x) => x.id === clock) ?? CLOCKS[1];
   return {
     id: uid() + uid(),
     problemId,
     format,
+    hard,
     mode,
     clock: c.id,
     clockMs: c.sec * 1000,
@@ -196,6 +199,10 @@ export function scoreFor(m: Match, p: Player, r: Result): Award {
   }
   let pts = parts.reduce((n, [, v]) => n + v, 0) * CLOCK_MULT[m.clock];
   const mult: [string, number][] = [[`${m.clock} x${CLOCK_MULT[m.clock]}`, 0]];
+  for (const h of m.hard ?? []) {
+    pts *= HARD_MODES[h].mult;
+    mult.push([`${HARD_MODES[h].label} x${HARD_MODES[h].mult}`, 0]);
+  }
   if (m.format === "ai") {
     pts *= 1.25;
     mult.push(["boss x1.25", 0]);

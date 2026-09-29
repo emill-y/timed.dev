@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { get, set, withLock, hasRedis } from "@/lib/store";
 import { getUser } from "@/lib/accounts";
+import { HARD_MODES, type HardMode } from "@/lib/glitch";
 import { currentUser } from "@/lib/auth";
 import {
   BOT_FILL_MS, CLOCKS, MODES, STALE_MS, createMatch, makeBot, uid,
@@ -48,6 +49,8 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const format: Format = body.format === "ai" ? "ai" : "classic";
   const mode: Mode = body.mode === "2v2" ? "2v2" : "1v1";
+  // Hard modes change the rules, so they get their own queue.
+  const hard = (Array.isArray(body.hard) ? body.hard : []).filter((h: unknown): h is HardMode => typeof h === "string" && h in HARD_MODES).sort();
   const clock: ClockId = CLOCKS.some((c) => c.id === body.clock) ? body.clock : "blitz";
   // Logged in = ranked under your account name. Guests play unranked, and
   // can't borrow a registered username.
@@ -62,13 +65,13 @@ export async function POST(req: Request) {
   const id: string = clean(body.ticket, 16) || uid() + uid();
   const size = MODES[mode].size;
   const per = size / 2;
-  const qkey = `queue:${format}:${mode}:${clock}`;
+  const qkey = `queue:${format}:${mode}:${clock}:${hard.join("+") || "std"}`;
   const now = Date.now();
 
   // Practice: straight into a match against bots.
   if (body.practice) {
     const teams = [[[{ id, name, userId, joinedAt: now, lastSeen: now }]], []];
-    const match = createMatch(format, mode, clock, toPlayers(teams, per));
+    const match = createMatch(format, mode, clock, toPlayers(teams, per), hard);
     await set(`match:${match.id}`, match, 3600);
     return NextResponse.json({ status: "matched", matchId: match.id, playerId: id });
   }
@@ -109,7 +112,7 @@ export async function POST(req: Request) {
 
       if (teams) {
         const players = toPlayers(teams, per);
-        const match = createMatch(format, mode, clock, players);
+        const match = createMatch(format, mode, clock, players, hard);
         await set(`match:${match.id}`, match, 3600);
         const ids = new Set(players.map((p) => p.id));
         for (const p of players) if (!p.bot) await set(`ticket:${p.id}`, { matchId: match.id, playerId: p.id }, 600);

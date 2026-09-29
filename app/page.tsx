@@ -15,7 +15,7 @@ type Phase =
   | { k: "match"; s: Session }
   | { k: "result"; s: Session; view: MatchView; stats: Stats };
 
-const DEFAULT: Cfg = { format: "classic", mode: "1v1", clock: "blitz", name: "", party: "" };
+const DEFAULT: Cfg = { format: "classic", mode: "1v1", clock: "blitz", name: "", party: "", hard: [] };
 
 export default function Page() {
   const [phase, setPhase] = useState<Phase>({ k: "home" });
@@ -103,7 +103,7 @@ export default function Page() {
           <span>timed</span><span className="dot">.</span><span className="tld">dev</span>
         </div>
         <span className="spacer" />
-        <span className="pill"><span className="live-dot" />{cfg.format === "ai" ? "ai mode" : "classic"} · {cfg.mode} · {cfg.clock}</span>
+        <span className="pill"><span className="live-dot" />{cfg.format === "ai" ? "ai mode" : "classic"} · {cfg.mode} · {cfg.clock}{cfg.hard.length ? " · hard" : ""}</span>
         {phase.k !== "match" && <a className="nav" href="/leaderboard">leaderboard</a>}
         {user ? (
           <>

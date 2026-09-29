@@ -1,5 +1,5 @@
 // Small browser-side helpers shared by the screens.
-export type Cfg = { format: "classic" | "ai"; mode: "1v1" | "2v2"; clock: "bullet" | "blitz" | "rapid"; name: string; party: string };
+export type Cfg = { format: "classic" | "ai"; mode: "1v1" | "2v2"; clock: "bullet" | "blitz" | "rapid"; name: string; party: string; hard: "glitch"[] };
 export type Session = { matchId: string; playerId: string };
 export type Stats = {
   runs: number; submits: number; failed: number; keys: number; pasted: number; typed: number;

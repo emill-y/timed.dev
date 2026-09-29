@@ -4,6 +4,7 @@ import { CLOCKS } from "@/lib/game";
 import { fmtTime, type Cfg, type HistoryItem, type Me } from "@/lib/client";
 import { loadAi, maskKey, type AiSettings } from "@/lib/ai";
 import KeySettings from "./KeySettings";
+import { HARD_MODES, type HardMode } from "@/lib/glitch";
 
 type Props = {
   cfg: Cfg;
@@ -83,6 +84,24 @@ export default function Home({ cfg, setCfg, history, user, error, modalOpen, onA
             </button>
           </>
         )}
+      </div>
+
+      <div className="hardbar">
+        <span className="k">hard modes</span>
+        {(Object.keys(HARD_MODES) as HardMode[]).map((h) => {
+          const on = cfg.hard.includes(h);
+          return (
+            <button
+              key={h}
+              className={`hard-chip ${on ? "on" : ""}`}
+              onClick={() => setCfg({ ...cfg, hard: on ? cfg.hard.filter((x) => x !== h) : [...cfg.hard, h] })}
+              title={HARD_MODES[h].blurb}
+            >
+              <span className="box">{on ? "■" : "□"}</span> {HARD_MODES[h].label} <small>x{HARD_MODES[h].mult}</small>
+            </button>
+          );
+        })}
+        {cfg.hard.includes("glitch") && <span className="blurb">{HARD_MODES.glitch.blurb}</span>}
       </div>
 
       <section className="hero">

@@ -5,6 +5,7 @@ import type { RunOutput } from "@/lib/judge";
 import { FAIL_PENALTY_MS, type MatchView } from "@/lib/game";
 import { api, EMPTY_STATS, fmtClock, load, save, type Session, type Stats } from "@/lib/client";
 import Copilot from "./Copilot";
+import { corrupt, describe, scramble } from "@/lib/glitch";
 
 type Props = { session: Session; onOver: (v: MatchView, stats: Stats) => void; onAbort: () => void };
 
@@ -34,6 +35,10 @@ export default function Arena({ session, onOver, onAbort }: Props) {
   const taRef = useRef<HTMLTextAreaElement>(null);
   const gutterRef = useRef<HTMLDivElement>(null);
   const lastSynced = useRef("");
+  // Hard mode "glitch paste".
+  const [pasteUsed, setPasteUsed] = useState<boolean>(() => load(`glitch:${matchId}`, false, "session"));
+  const [glitchFrame, setGlitchFrame] = useState<string | null>(null);
+  const [shake, setShake] = useState(false);
 
   const problem = useMemo(() => (view ? getProblem(view.problemId) : null), [view?.problemId]); // eslint-disable-line react-hooks/exhaustive-deps
   const me = view?.players.find((p) => p.you);
@@ -199,6 +204,54 @@ export default function Arena({ session, onOver, onAbort }: Props) {
     }
   };
 
+  const hardGlitch = Boolean(view?.hard?.includes("glitch"));
+
+  // Plays the scramble animation over the editor, then lands the damaged code.
+  const glitchTo = (finalCode: string, preview: string, note: string) => {
+    const frames = 14;
+    let f = 0;
+    const tick = () => {
+      f++;
+      if (f < frames) {
+        const amount = f < frames / 2 ? 0.15 + f * 0.06 : Math.max(0.04, 0.6 - (f - frames / 2) * 0.09);
+        setGlitchFrame(scramble(f % 3 === 0 ? finalCode : preview, amount));
+        setTimeout(tick, 70);
+      } else {
+        setGlitchFrame(null);
+        setCode(finalCode);
+        setToast({ t: `glitched: ${note}`, red: true });
+      }
+    };
+    setGlitchFrame(scramble(preview, 0.1));
+    setTimeout(tick, 70);
+  };
+
+  const denyClipboard = (msg: string) => {
+    setShake(true);
+    setTimeout(() => setShake(false), 450);
+    setToast({ t: msg, red: true });
+  };
+
+  // A paste (or a pull / drop) under glitch mode: the first one lands
+  // corrupted, then the clipboard locks for the rest of the match.
+  const glitchPaste = (pasted: string, start: number, end: number) => {
+    if (pasteUsed || glitchFrame != null) return denyClipboard("clipboard locked");
+    const { text: bad, report } = corrupt(pasted, Date.now());
+    const current = taRef.current?.value ?? code;
+    const clean = current.slice(0, start) + pasted + current.slice(end);
+    const damaged = current.slice(0, start) + bad + current.slice(end);
+    setPasteUsed(true);
+    save(`glitch:${matchId}`, true, "session");
+    bump({ pasted: statsRef.current.pasted + pasted.length });
+    glitchTo(damaged, clean, describe(report));
+  };
+
+  // Copilot output under glitch mode is always damaged on arrival.
+  const glitchApply = (next: string) => {
+    const { text: bad, report } = corrupt(next, Date.now());
+    glitchTo(bad, next, describe(report));
+  };
+
   if (lost) {
     return (
       <section className="queue">
@@ -277,22 +330,59 @@ export default function Arena({ session, onOver, onAbort }: Props) {
           )}
           <div className="hint">
             <kbd>ctrl</kbd>+<kbd>enter</kbd> run · <kbd>ctrl</kbd>+<kbd>shift</kbd>+<kbd>enter</kbd> submit
-            {view.format === "ai" ? <> · <kbd>ctrl</kbd>+<kbd>k</kbd> copilot. Boss ticket: the copilot is your co-driver.</> : <>. Paste is fine.</>} Plain JavaScript, runs in your browser.
+            {view.format === "ai" ? <> · <kbd>ctrl</kbd>+<kbd>k</kbd> copilot. Boss ticket: the copilot is your co-driver.</> : hardGlitch ? null : <>. Paste is fine.</>} Plain JavaScript, judged on the server.
+            {hardGlitch && (
+              <span className="hard-note">
+                <b>glitch paste is on.</b> Your first paste lands damaged (lines deleted, names scrambled) and then the clipboard locks.
+                {view.format === "ai" ? " Copilot code arrives damaged every time." : ""}
+              </span>
+            )}
           </div>
         </aside>
 
         <div className="work">
-          <div className={`editor ${started && !doneRef.current ? "" : "locked"}`}>
+          <div className={`editor ${started && !doneRef.current ? "" : "locked"} ${shake ? "shake" : ""} ${glitchFrame != null ? "glitching" : ""}`}>
+            {glitchFrame != null && (
+              <pre className="glitch-layer" aria-hidden style={{ left: gutterRef.current?.offsetWidth ?? 52 }}>{glitchFrame}</pre>
+            )}
+            {hardGlitch && (
+              <span className={`clip-badge ${pasteUsed ? "locked" : ""}`}>
+                {pasteUsed ? "clipboard locked" : "1 glitched paste left"}
+              </span>
+            )}
             <div className="gutter" ref={gutterRef}>
               {Array.from({ length: lines }, (_, i) => i + 1).join("\n")}
             </div>
             <textarea
               ref={taRef}
               value={code}
-              readOnly={!started || doneRef.current || overRef.current}
+              readOnly={!started || doneRef.current || overRef.current || glitchFrame != null}
               onChange={(e) => setCode(e.target.value)}
               onKeyDown={onEditorKey}
-              onPaste={(e) => bump({ pasted: statsRef.current.pasted + e.clipboardData.getData("text").length })}
+              onPaste={(e) => {
+                const text = e.clipboardData.getData("text");
+                if (!hardGlitch) return bump({ pasted: statsRef.current.pasted + text.length });
+                e.preventDefault();
+                if (e.currentTarget.readOnly) return;
+                glitchPaste(text, e.currentTarget.selectionStart, e.currentTarget.selectionEnd);
+              }}
+              onCopy={(e) => {
+                if (hardGlitch && pasteUsed) {
+                  e.preventDefault();
+                  denyClipboard("copy locked");
+                }
+              }}
+              onCut={(e) => {
+                if (hardGlitch && pasteUsed) {
+                  e.preventDefault();
+                  denyClipboard("cut locked");
+                }
+              }}
+              onDrop={(e) => {
+                if (!hardGlitch) return;
+                e.preventDefault();
+                denyClipboard("no drag & drop in glitch mode");
+              }}
               onScroll={(e) => {
                 if (gutterRef.current) gutterRef.current.scrollTop = e.currentTarget.scrollTop;
               }}
@@ -356,7 +446,12 @@ export default function Arena({ session, onOver, onAbort }: Props) {
               <header>
                 co-hack · <b>{mate.name}</b>{mate.isBot ? " (ghost, no code)" : ""}
                 {mate.code && (
-                  <button className="btn-ghost" onClick={() => setCode(mate.code!)}>pull their code</button>
+                  <button
+                    className="btn-ghost"
+                    onClick={() => (hardGlitch ? glitchPaste(mate.code!, 0, (taRef.current?.value ?? code).length) : setCode(mate.code!))}
+                  >
+                    pull their code
+                  </button>
                 )}
               </header>
               {mate.code && <pre>{mate.code}</pre>}
@@ -369,7 +464,7 @@ export default function Arena({ session, onOver, onAbort }: Props) {
             problem={problem}
             locked={!started || doneRef.current || Boolean(view.result.over)}
             getCode={() => taRef.current?.value ?? code}
-            applyCode={setCode}
+            applyCode={hardGlitch ? glitchApply : setCode}
             lastRun={out}
             onUsage={(u) =>
               bump({

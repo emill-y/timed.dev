@@ -15,6 +15,14 @@ LeetCode tested whether you could write a loop from memory. timed.dev tests **sp
 - Nobody else in the queue? After 12s **ghosts** (bots on a realistic pace curve) take the empty seats. You can also go straight to *practice vs ghost*.
 - Results show your time, submits, runs, and **paste share** (how much of your code was pasted rather than typed). It's a stat, not a penalty.
 
+## Hard modes
+
+Toggle under the mode bar on the home screen. Hard-mode players only get matched with each other, and wins pay extra points.
+
+- **Glitch paste (x1.3 points).** Your first paste goes through, but it arrives damaged after a glitch animation. Roughly a quarter of its logic lines (up to 4) are deleted, leaving their indentation behind as gaps. One or two variable names get scrambled into typos at some of their uses. When nothing gets renamed, a comparison or off-by-one gets flipped instead. You have to find and fix the damage by hand. After that, paste, copy, cut and drag-and-drop are locked for the rest of the match, and pulling a teammate's code counts as your paste. In AI mode, every block of copilot code arrives damaged.
+
+The corruption logic lives in `lib/glitch.ts`.
+
 ## AI mode: how good a Claude coder are you?
 
 A separate format (with its own queue and leaderboard) built around **boss tickets**: an expression evaluator, an LRU cache replay, a markdown table importer, dependency install order, and a JSON-path resolver. These are specs a model half-solves on the first try, with hidden tests that catch the other half.
@@ -51,7 +59,7 @@ Keyboard first: `enter` to queue, `ctrl+enter` to run, `ctrl+shift+enter` to sub
 - Player code is judged server-side in a QuickJS/WASM sandbox (`lib/judge.ts`, route `/api/match/[id]/judge`). It ships browser-ish shims (`URLSearchParams`, `structuredClone`) since tickets commonly reach for them.
 - Matchmaking and match state go through two small API routes (`/api/queue` and `/api/match/[id]`), polled once a second.
 - The AI copilot uses the official Anthropic and OpenAI JS SDKs in the browser, with `dangerouslyAllowBrowser`. That's safe here because the only key involved is the player's own, kept on the player's machine.
-- Storage: **Upstash Redis** over REST when configured (queue, matches, accounts, sessions, leaderboards). **Required in production:** without it, accounts and points live in one server instance's memory and vanish on redeploy. Without it, state lives in process memory, which is fine for `npm run dev`. On serverless, though, separate instances don't share memory, so live human-vs-human matches need Redis.
+- Storage: **Upstash Redis** over REST when configured (queue, matches, accounts, sessions, leaderboards). **Required in production:** without it, accounts and points live in one server instance's memory and vanish on redeploy. Locally (`npm run dev`) it falls back to process memory.
 
 ## Run locally
 
@@ -77,4 +85,5 @@ Tickets live in `lib/problems.ts`. Each one has a prompt, a stub, and tests (mar
 - No password reset yet (there's no email on file).
 - Nothing stops one person from running two accounts and throwing matches between them. Ghost-match farming is capped (see the table above), but human-vs-human collusion isn't detected.
 - A few pathological built-ins (e.g. filling a multi-million-element array) can keep the judge busy for several seconds before it hits the memory cap. Per-seat rate limits and one-judge-at-a-time bound the cost.
+- Hard-mode clipboard locks are enforced in the browser, so a determined player could get around them with devtools. (Scores themselves are still judged server-side.)
 - Only JavaScript for now. Python via Pyodide is the obvious next step.

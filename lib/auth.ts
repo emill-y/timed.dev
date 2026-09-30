@@ -1,38 +1,12 @@
-// Username + password accounts. Passwords are hashed with scrypt (per-user
-// salt); sessions are random tokens in an httpOnly cookie, stored server-side
-// only as a SHA-256 hash.
-import { createHash, randomBytes, scrypt as scryptCb, timingSafeEqual } from "node:crypto";
-import { promisify } from "node:util";
+// Sign-in is GitHub OAuth only. Sessions are random tokens in an httpOnly
+// cookie, stored server-side only as a SHA-256 hash.
+import { createHash, randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
 import { del, get, incr, set } from "./store";
 import { getUser, type User } from "./accounts";
 
-const scrypt = promisify(scryptCb) as (pw: string, salt: Buffer, len: number) => Promise<Buffer>;
-
 export const SESSION_COOKIE = "td_session";
 const SESSION_TTL = 60 * 60 * 24 * 30; // 30 days
-
-export const USERNAME_RE = /^[A-Za-z0-9_.-]{3,18}$/;
-export const PASSWORD_MIN = 8;
-
-export async function hashPassword(pw: string): Promise<string> {
-  const salt = randomBytes(16);
-  const key = await scrypt(pw, salt, 64);
-  return `scrypt$${salt.toString("base64")}$${key.toString("base64")}`;
-}
-
-export async function verifyPassword(pw: string, stored: string): Promise<boolean> {
-  const [alg, saltB64, keyB64] = stored.split("$");
-  if (alg !== "scrypt" || !saltB64 || !keyB64) return false;
-  const want = Buffer.from(keyB64, "base64");
-  const got = await scrypt(pw, Buffer.from(saltB64, "base64"), want.length);
-  return timingSafeEqual(got, want);
-}
-
-// A hash to compare against when the username doesn't exist, so a login for
-// a missing user takes as long as one with a wrong password.
-let dummyHash: Promise<string> | null = null;
-export const dummy = () => (dummyHash ??= hashPassword("timed.dev-dummy-password"));
 
 const sha = (t: string) => createHash("sha256").update(t).digest("hex");
 
@@ -71,4 +45,19 @@ export function clientIp(req: Request): string {
 // True when the caller is over the limit for this bucket.
 export async function limited(bucket: string, max: number, windowSec: number): Promise<boolean> {
   return (await incr(`rl:${bucket}`, windowSec)) > max;
+}
+
+// ---- GitHub OAuth ----
+// The base URLs are overridable only so tests can point at a mock server.
+export const GH = {
+  web: process.env.GITHUB_OAUTH_BASE || "https://github.com",
+  api: process.env.GITHUB_API_BASE || "https://api.github.com",
+  id: process.env.GITHUB_CLIENT_ID || "",
+  secret: process.env.GITHUB_CLIENT_SECRET || "",
+};
+export const githubConfigured = () => Boolean(GH.id && GH.secret);
+export const devLoginAllowed = () => process.env.NODE_ENV !== "production" && !githubConfigured();
+
+export function appOrigin(req: Request): string {
+  return (process.env.APP_URL || new URL(req.url).origin).replace(/\/$/, "");
 }

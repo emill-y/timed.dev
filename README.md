@@ -15,6 +15,18 @@ LeetCode tested whether you could write a loop from memory. timed.dev tests **sp
 - Nobody else in the queue? After 12s **ghosts** (bots on a realistic pace curve) take the empty seats. You can also go straight to *practice vs ghost*.
 - Results show your time, submits, runs, and **paste share** (how much of your code was pasted rather than typed). It's a stat, not a penalty.
 
+## Drops: a new challenge every 30 minutes
+
+On the hour and half hour, a fresh **generated** ticket goes live (`lib/generators.ts`). Nine ticket families each randomize their rules, wording and test data from a seed, and expected answers come from executing a reference solution, so drops never run dry and are always solvable. Everyone gets **one attempt** per drop with 10 minutes on their own clock. The fastest clear takes the drop board, and the home screen counts down to the next one. There's no cron: the drop is derived from the clock, and the first visitor of a window posts "drop #N is live" to the feed. `npm run test:generators` runs 108 generated tickets through the server judge with their reference solutions.
+
+## The feed
+
+`/feed` is a public, Venmo-style timeline: "eisha beat ghost_nitro · Rate Limiter · bullet · 22.1s", with points shown where Venmo shows amounts, GitHub avatars, likes and comments. Every finished match and every drop clear by a signed-in player posts automatically.
+
+## RL environment
+
+The same generators, sandboxed judge and glitch corrupter are exposed as an RL environment for coding models, with `solve` and `repair` tasks, verifiable rewards, a Python client and a dataset exporter. See [`rl/README.md`](rl/README.md).
+
 ## Hard modes
 
 Toggle under the mode bar on the home screen. Hard-mode players only get matched with each other, and wins pay extra points.
@@ -34,7 +46,7 @@ A separate format (with its own queue and leaderboard) built around **boss ticke
 
 ## Accounts, points & leaderboard
 
-**Real accounts.** Sign up with a username and password; guests can still play, unranked. Passwords are hashed with scrypt (per-user salt). Sessions are random tokens in an `httpOnly` cookie, and the server stores only their SHA-256 hash. Login and signup are rate-limited per IP and per username, and a guest can't queue under a registered username.
+**Sign in with GitHub** (the only way to create an account). The OAuth flow uses a one-time `state` cookie. The access token is used once to read your public profile, then dropped. Accounts are keyed by GitHub's numeric user id, so renaming your GitHub login keeps your history. Sessions are random tokens in an `httpOnly` cookie, and the server stores only their SHA-256 hash. Guests can still play regular matches unranked, but drops, points, likes and comments need an account.
 
 **Points can't be faked.** Every RUN and SUBMIT is judged **on the server**. Player code runs in [QuickJS](https://github.com/justjake/quickjs-emscripten) compiled to WebAssembly: a separate JS engine with no access to Node, the network or the filesystem, capped at 24 MB of memory, 1s per test and 4s per submission. Progress bars, finish times, failed-submit penalties, wins and points all come from judged results. Browsers can't report scores, and opponents never learn your seat id.
 
@@ -61,18 +73,31 @@ Keyboard first: `enter` to queue, `ctrl+enter` to run, `ctrl+shift+enter` to sub
 - The AI copilot uses the official Anthropic and OpenAI JS SDKs in the browser, with `dangerouslyAllowBrowser`. That's safe here because the only key involved is the player's own, kept on the player's machine.
 - Storage: **Upstash Redis** over REST when configured (queue, matches, accounts, sessions, leaderboards). **Required in production:** without it, accounts and points live in one server instance's memory and vanish on redeploy. Locally (`npm run dev`) it falls back to process memory.
 
+## Configuration
+
+| env var | what for |
+|---|---|
+| `KV_REST_API_URL` / `KV_REST_API_TOKEN` (or `UPSTASH_REDIS_REST_*`) | Redis. **Required in production.** |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | GitHub sign-in. Create an OAuth App at github.com/settings/developers with callback URL `https://<your-domain>/api/auth/github/callback`. |
+| `APP_URL` | optional: your public origin, if the request host isn't it |
+| `RL_API_KEYS` | comma-separated keys for the RL API (`/api/env/*`). Unset means the API is off in production. |
+
+Without GitHub credentials, `npm run dev` offers a throwaway "dev sign-in" instead. It never exists in production.
+
 ## Run locally
 
 ```bash
 npm install
 npm run dev              # http://localhost:3000
 npm run test:problems    # checks every ticket's tests against a reference solution
+npm run test:generators  # judges 108 generated tickets with their reference solutions
 ```
 
 ## Deploy to Vercel
 
 1. Go to [vercel.com/new](https://vercel.com/new) and import this GitHub repo. No settings to change: the framework is detected as Next.js.
 2. To get real human matchmaking, add Redis: in the Vercel project, open **Storage → Marketplace → Upstash (Redis)** and connect it. That sets `KV_REST_API_URL` / `KV_REST_API_TOKEN`; `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` also work. Then redeploy.
+3. Create a GitHub OAuth App (see Configuration above) and add `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` in Vercel → Settings → Environment Variables. Redeploy.
 
 Or from a terminal: `npx vercel --prod`.
 
@@ -82,7 +107,7 @@ Tickets live in `lib/problems.ts`. Each one has a prompt, a stub, and tests (mar
 
 ## Known limits (MVP)
 
-- No password reset yet (there's no email on file).
+- Drop boards rank by time only. There are no prizes or end-of-drop payouts yet (points are awarded on clear).
 - Nothing stops one person from running two accounts and throwing matches between them. Ghost-match farming is capped (see the table above), but human-vs-human collusion isn't detected.
 - A few pathological built-ins (e.g. filling a multi-million-element array) can keep the judge busy for several seconds before it hits the memory cap. Per-seat rate limits and one-judge-at-a-time bound the cost.
 - Hard-mode clipboard locks are enforced in the browser, so a determined player could get around them with devtools. (Scores themselves are still judged server-side.)

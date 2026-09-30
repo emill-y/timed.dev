@@ -43,13 +43,15 @@ export default function Result({ view, stats, playerId, ranked, onAward, onAgain
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Enter" || e.key === "Tab") {
         e.preventDefault();
-        onAgain();
+        if (view.drop != null) onHome();
+        else onAgain();
       } else if (e.key === "Escape") onHome();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onAgain, onHome]);
 
+  const isDrop = view.drop != null;
   let why: string;
   const mine = teamTime[me.team];
   const theirs = teamTime[opp];
@@ -57,6 +59,7 @@ export default function Result({ view, stats, playerId, ranked, onAward, onAgain
   else if (theirs != null && (mine == null || theirs < mine)) why = `Rivals went all-green in ${fmtTime(theirs)}${mine != null ? `, ${fmtTime(mine - theirs)} ahead of you` : ""}.`;
   else if (mine != null && mine === theirs) why = "Dead heat. Same finish time, down to the millisecond.";
   else why = `Clock ran out. Decided on tests passed: ${teamBest[me.team]} vs ${teamBest[opp]}.`;
+  if (isDrop) why = mine != null ? `Drop #${view.drop} cleared in ${fmtTime(mine)}. You're on the board; check the feed for your rank.` : `Out of clock on drop #${view.drop}: ${me.passed}/${view.total} tests. The next drop opens on the half hour.`;
 
   const aiShare = stats.pasted + stats.typed ? Math.round((stats.pasted / (stats.pasted + stats.typed)) * 100) : 0;
   const order = [...view.players].sort(
@@ -65,7 +68,9 @@ export default function Result({ view, stats, playerId, ranked, onAward, onAgain
 
   return (
     <section className="result">
-      <h1 className={`verdict ${outcome}`}>{outcome === "win" ? "you win" : outcome === "loss" ? "beaten" : "draw"}</h1>
+      <h1 className={`verdict ${isDrop ? (mine != null ? "win" : "loss") : outcome}`}>
+        {isDrop ? (mine != null ? "cleared" : "dnf") : outcome === "win" ? "you win" : outcome === "loss" ? "beaten" : "draw"}
+      </h1>
       <p className="why">{why} Ticket: {problem.title}.</p>
 
       <div className="points">
@@ -111,7 +116,11 @@ export default function Result({ view, stats, playerId, ranked, onAward, onAgain
       </div>
 
       <div className="next-row">
-        <button className="btn-go" onClick={onAgain}><span>run it back</span></button>
+        {isDrop ? (
+          <a className="btn-go" href="/feed"><span>see the feed</span></a>
+        ) : (
+          <button className="btn-go" onClick={onAgain}><span>run it back</span></button>
+        )}
         <button className="btn-ghost" onClick={onHome}>back to pits <kbd>esc</kbd></button>
       </div>
     </section>

@@ -53,7 +53,7 @@ const FLIPS: [RegExp, string][] = [
   [/ && /, " || "],
 ];
 
-export function corrupt(text: string, seed = Date.now()): { text: string; report: GlitchReport } {
+export function corrupt(text: string, seed = Date.now(), opts: { noDelete?: boolean } = {}): { text: string; report: GlitchReport } {
   const r = rng(seed);
   const lines = text.split("\n");
   const report: GlitchReport = { removed: 0, renamed: 0, flipped: 0 };
@@ -67,7 +67,7 @@ export function corrupt(text: string, seed = Date.now()): { text: string; report
       return t.length > 3 && !/^[{}()[\];,]+$/.test(t) && !/^(export\s+)?(async\s+)?function\b/.test(t) && !t.startsWith("//");
     })
     .map(({ i }) => i);
-  const want = Math.max(1, Math.min(4, Math.round(candidates.length * 0.25), candidates.length - 1));
+  const want = opts.noDelete ? 0 : Math.max(1, Math.min(4, Math.round(candidates.length * 0.25), candidates.length - 1));
   const doomed = new Set<number>();
   while (doomed.size < want && doomed.size < candidates.length) {
     doomed.add(candidates[Math.floor(r() * candidates.length)]);

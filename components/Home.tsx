@@ -12,13 +12,13 @@ type Props = {
   history: HistoryItem[];
   user: Me | null;
   error: string | null;
-  modalOpen: boolean;
-  onAuth: (tab: "login" | "signup") => void;
+  onAuth: () => void;
+  drop: React.ReactNode;
   onFind: () => void;
   onPractice: () => void;
 };
 
-export default function Home({ cfg, setCfg, history, user, error, modalOpen, onAuth, onFind, onPractice }: Props) {
+export default function Home({ cfg, setCfg, history, user, error, onAuth, onFind, onPractice, drop }: Props) {
   const [ai, setAi] = useState<AiSettings | null>(null);
   const [keysOpen, setKeysOpen] = useState(false);
   const isAi = cfg.format === "ai";
@@ -34,7 +34,6 @@ export default function Home({ cfg, setCfg, history, user, error, modalOpen, onA
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (modalOpen) return;
       if (keysOpen) {
         if (e.key === "Escape") setKeysOpen(false);
         return;
@@ -172,13 +171,14 @@ export default function Home({ cfg, setCfg, history, user, error, modalOpen, onA
           ) : (
             <span>
               Playing as a guest (no points).{" "}
-              <button className="link" onClick={() => onAuth("signup")}>Sign up</button> or{" "}
-              <button className="link" onClick={() => onAuth("login")}>log in</button> to earn points and get on the{" "}
+              <button className="link" onClick={onAuth}>Sign in with GitHub</button> to earn points, take drops and get on the{" "}
               <a href="/leaderboard">leaderboard</a>.
             </span>
           )}
         </div>
         <p className="mobile-note">Heads up: matches are built for a keyboard and a big screen.</p>
+
+        {drop}
 
         <div className="rules">
           {isAi ? (

@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test:problems": "node --experimental-strip-types scripts/verify-problems.ts"
+    "test:problems": "node --experimental-strip-types scripts/verify-problems.ts",
+    "export:dataset": "node --experimental-strip-types --no-warnings scripts/export-dataset.ts",
+    "test:generators": "node --experimental-strip-types --no-warnings scripts/verify-generators.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.129.0",

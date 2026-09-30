@@ -284,9 +284,9 @@ export default function Arena({ session, onOver, onAbort }: Props) {
   return (
     <>
       <div className="hud">
-        {[0, 1].map((t) => (
+        {(view.drop != null ? [0] : [0, 1]).map((t) => (
           <div key={t} className={`team ${t === 1 ? "right" : ""}`} style={{ "--c": t === 0 ? "var(--a)" : "var(--b)", order: t === 0 ? 0 : 2 } as React.CSSProperties}>
-            <div className="team-label">{t === myTeam ? "your team" : "rivals"}</div>
+            <div className="team-label">{view.drop != null ? `drop #${view.drop} · solo` : t === myTeam ? "your team" : "rivals"}</div>
             {teams[t].map((p) => (
               <div className="lane" key={p.id}>
                 <span className={`who ${p.you ? "me" : ""}`}>
@@ -305,7 +305,7 @@ export default function Arena({ session, onOver, onAbort }: Props) {
         ))}
         <div className={`clock ${started && remaining < 30000 ? "low" : ""}`} style={{ order: 1 }}>
           {started ? fmtClock(remaining) : fmtClock(view.clockMs)}
-          <small>{view.clock} · {view.mode}</small>
+          <small>{view.drop != null ? "one shot" : `${view.clock} · ${view.mode}`}</small>
         </div>
       </div>
 

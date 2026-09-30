@@ -4,10 +4,11 @@ import Home from "@/components/Home";
 import Queue from "@/components/Queue";
 import Arena from "@/components/Arena";
 import Result from "@/components/Result";
-import AuthModal from "@/components/AuthModal";
+import DropCard from "@/components/DropCard";
+import Avatar from "@/components/Avatar";
 import { getProblem } from "@/lib/problems";
 import type { MatchView } from "@/lib/game";
-import { api, load, save, type Cfg, type HistoryItem, type Me, type Session, type Stats } from "@/lib/client";
+import { api, load, save, signIn, type Cfg, type HistoryItem, type Me, type Session, type Stats } from "@/lib/client";
 
 type Phase =
   | { k: "home" }
@@ -22,7 +23,6 @@ export default function Page() {
   const [cfg, setCfgState] = useState<Cfg>(DEFAULT);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [user, setUser] = useState<Me | null>(null);
-  const [authOpen, setAuthOpen] = useState<null | "login" | "signup">(null);
   const [error, setError] = useState<string | null>(null);
 
   const refreshUser = useCallback(async () => {
@@ -46,6 +46,11 @@ export default function Page() {
     setHistory(load<HistoryItem[]>("history", []));
     const live = load<Session | null>("live", null, "session");
     if (live) setPhase({ k: "match", s: live });
+    const authError = new URLSearchParams(location.search).get("auth_error");
+    if (authError) {
+      setError(`GitHub sign-in: ${authError}`);
+      window.history.replaceState(null, "", "/");
+    }
   }, []);
 
   const setCfg = (c: Cfg) => {
@@ -104,18 +109,19 @@ export default function Page() {
         </div>
         <span className="spacer" />
         <span className="pill"><span className="live-dot" />{cfg.format === "ai" ? "ai mode" : "classic"} · {cfg.mode} · {cfg.clock}{cfg.hard.length ? " · hard" : ""}</span>
+        {phase.k !== "match" && <a className="nav" href="/feed">feed</a>}
         {phase.k !== "match" && <a className="nav" href="/leaderboard">leaderboard</a>}
         {user ? (
           <>
-            <span className="pill">{user.username} <b>{user.points.toLocaleString()}</b> pts{user.rank ? ` · #${user.rank}` : ""}</span>
+            <span className="pill who"><Avatar src={user.avatar} login={user.username} /><span>{user.username}</span><b>{user.points.toLocaleString()}</b><span>pts{user.rank ? ` · #${user.rank}` : ""}</span></span>
             {phase.k !== "match" && <button className="nav" onClick={logout}>log out</button>}
           </>
         ) : (
-          phase.k !== "match" && <button className="nav hot" onClick={() => setAuthOpen("login")}>log in</button>
+          phase.k !== "match" && <button className="nav hot gh" onClick={signIn}>sign in with GitHub</button>
         )}
       </header>
 
-      {phase.k === "home" && <Home cfg={cfg} setCfg={setCfg} history={history} user={user} error={error} onAuth={setAuthOpen} onFind={find} onPractice={practice} modalOpen={authOpen != null} />}
+      {phase.k === "home" && <Home cfg={cfg} setCfg={setCfg} history={history} user={user} error={error} onAuth={signIn} onFind={find} onPractice={practice} drop={<DropCard user={user} onEnter={enter} onError={setError} />} />}
       {phase.k === "queue" && <Queue cfg={cfg} onMatched={enter} onCancel={home} onError={queueFailed} />}
       {phase.k === "match" && <Arena key={phase.s.matchId} session={phase.s} onOver={over} onAbort={home} />}
       {phase.k === "result" && (
@@ -129,17 +135,6 @@ export default function Page() {
         {phase.k === "result" && <><span><kbd>enter</kbd> run it back</span><span><kbd>esc</kbd> pits</span></>}
       </footer>
       {phase.k === "home" && <div className="stripe" />}
-      {authOpen && (
-        <AuthModal
-          initial={authOpen}
-          onClose={() => setAuthOpen(null)}
-          onDone={(u) => {
-            setUser(u);
-            setError(null);
-            setAuthOpen(null);
-          }}
-        />
-      )}
     </main>
   );
 }

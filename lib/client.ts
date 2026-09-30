@@ -8,7 +8,7 @@ export type Stats = {
 export const EMPTY_STATS: Stats = { runs: 0, submits: 0, failed: 0, keys: 0, pasted: 0, typed: 0, prompts: 0, tokensIn: 0, tokensOut: 0, aiChars: 0 };
 
 export type Me = {
-  username: string; points: number; byFormat: { classic: number; ai: number };
+  username: string; avatar?: string; points: number; byFormat: { classic: number; ai: number };
   wins: number; losses: number; draws: number; matches: number;
   best: { classic?: number; ai?: number }; rank: number | null;
 };
@@ -52,3 +52,28 @@ export async function api<T>(url: string, body?: unknown): Promise<T> {
   }
   return r.json();
 }
+
+// GitHub is the only sign-in. Local dev without GitHub credentials gets a
+// throwaway dev login instead.
+export async function signIn() {
+  try {
+    const c = await api<{ github: boolean; dev: boolean }>("/api/auth/config");
+    if (c.github) return void (location.href = "/api/auth/github");
+    if (c.dev) {
+      const login = prompt("Dev sign-in (GitHub isn't configured locally). Pick a login:", "dev");
+      if (login) location.href = `/api/auth/dev?login=${encodeURIComponent(login)}`;
+      return;
+    }
+    alert("GitHub sign-in isn't configured on this deployment yet.");
+  } catch {
+    alert("Couldn't reach the server.");
+  }
+}
+
+export const ago = (t: number, now = Date.now()) => {
+  const s = Math.max(1, Math.round((now - t) / 1000));
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}m`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h`;
+  return `${Math.floor(s / 86400)}d`;
+};

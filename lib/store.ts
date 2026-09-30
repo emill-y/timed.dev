@@ -136,3 +136,70 @@ export async function claimKey(k: string, v: unknown, ttlSec: number): Promise<b
   mem.set(k, { v: raw, exp: Date.now() + ttlSec * 1000 });
   return true;
 }
+
+// ---- lists (feed) ----
+const g3 = globalThis as unknown as { __timedL?: Map<string, string[]>; __timedS?: Map<string, Set<string>> };
+const lmem = (g3.__timedL ??= new Map());
+const smem = (g3.__timedS ??= new Map());
+
+// Push to the head and keep at most `max` items.
+export async function lpushCapped(k: string, v: unknown, max: number): Promise<void> {
+  const raw = JSON.stringify(v);
+  if (hasRedis) {
+    await redis(["LPUSH", k, raw]);
+    await redis(["LTRIM", k, 0, max - 1]);
+    return;
+  }
+  const l = lmem.get(k) ?? [];
+  l.unshift(raw);
+  lmem.set(k, l.slice(0, max));
+}
+
+export async function lrange<T>(k: string, start: number, stop: number): Promise<T[]> {
+  const raw: string[] = hasRedis ? await redis(["LRANGE", k, start, stop]) : (lmem.get(k) ?? []).slice(start, stop + 1);
+  return raw.map((x) => JSON.parse(x) as T);
+}
+
+// ---- sets (likes) ----
+export async function sadd(k: string, m: string): Promise<void> {
+  if (hasRedis) return void (await redis(["SADD", k, m]));
+  const s = smem.get(k) ?? new Set();
+  s.add(m);
+  smem.set(k, s);
+}
+export async function srem(k: string, m: string): Promise<void> {
+  if (hasRedis) return void (await redis(["SREM", k, m]));
+  smem.get(k)?.delete(m);
+}
+export async function smembers(k: string): Promise<string[]> {
+  if (hasRedis) return (await redis(["SMEMBERS", k])) ?? [];
+  return [...(smem.get(k) ?? [])];
+}
+
+// ---- ascending boards (drop times: lower is better) ----
+export async function zadd(k: string, score: number, member: string): Promise<void> {
+  if (hasRedis) return void (await redis(["ZADD", k, score, member]));
+  zset(k).set(member, score);
+}
+export async function zlow(k: string, n: number): Promise<{ member: string; score: number }[]> {
+  if (hasRedis) {
+    const flat: string[] = await redis(["ZRANGE", k, 0, n - 1, "WITHSCORES"]);
+    const out = [];
+    for (let i = 0; i < flat.length; i += 2) out.push({ member: flat[i], score: Number(flat[i + 1]) });
+    return out;
+  }
+  return [...zset(k)].map(([member, score]) => ({ member, score })).sort((a, b) => a.score - b.score).slice(0, n);
+}
+export async function zrankLow(k: string, member: string): Promise<number | null> {
+  if (hasRedis) {
+    const r = await redis(["ZRANK", k, member]);
+    return r == null ? null : Number(r);
+  }
+  const me = zset(k).get(member);
+  if (me == null) return null;
+  return [...zset(k).values()].filter((v) => v < me).length;
+}
+export async function zcard(k: string): Promise<number> {
+  if (hasRedis) return Number(await redis(["ZCARD", k]));
+  return zset(k).size;
+}

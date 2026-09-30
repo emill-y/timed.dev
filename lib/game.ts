@@ -49,6 +49,7 @@ export type Match = {
   problemId: string;
   format: Format;
   hard: HardMode[];
+  drop?: number; // solo time trial on drop #n
   mode: Mode;
   clock: ClockId;
   clockMs: number;
@@ -86,17 +87,25 @@ export function makeBot(team: 0 | 1, taken: Set<string>): Player {
   };
 }
 
-export function createMatch(format: Format, mode: Mode, clock: ClockId, players: Player[], hard: HardMode[] = []): Match {
-  const problemId = randomProblemId(format);
+export function createMatch(
+  format: Format,
+  mode: Mode,
+  clock: ClockId,
+  players: Player[],
+  hard: HardMode[] = [],
+  opts: { problemId?: string; clockMs?: number; drop?: number } = {},
+): Match {
+  const problemId = opts.problemId ?? randomProblemId(format);
   const c = CLOCKS.find((x) => x.id === clock) ?? CLOCKS[1];
   return {
     id: uid() + uid(),
     problemId,
     format,
     hard,
+    ...(opts.drop != null ? { drop: opts.drop } : {}),
     mode,
     clock: c.id,
-    clockMs: c.sec * 1000,
+    clockMs: opts.clockMs ?? c.sec * 1000,
     total: getProblem(problemId).tests.length,
     startAt: Date.now() + COUNTDOWN_MS,
     players,
@@ -146,6 +155,8 @@ export function resolve(m: Match, now = Date.now()): Result {
     }
   }
   if (elapsed >= m.clockMs) {
+    // Solo runs (drops) have no rival: running out of time is a DNF, not a win.
+    if (!m.players.some((p) => p.team === 1)) return { over: true, winner: null, teamTime, teamBest };
     const winner = teamBest[0] === teamBest[1] ? null : teamBest[0] > teamBest[1] ? 0 : 1;
     return { over: true, winner, teamTime, teamBest };
   }
@@ -190,6 +201,16 @@ const CLOCK_MULT: Record<ClockId, number> = { bullet: 1.5, blitz: 1.2, rapid: 1 
 // matches pay a fraction so the ladder can't be farmed offline.
 export function scoreFor(m: Match, p: Player, r: Result): Award {
   const parts: [string, number][] = [];
+  if (m.drop != null) {
+    // Drops: one shot, scored on your own clock.
+    if (p.doneAt != null) {
+      parts.push(["cleared", 60]);
+      parts.push([`${p.passed} tests`, p.passed * 5]);
+      const speed = Math.max(0, Math.round(100 * (1 - p.doneAt / m.clockMs)));
+      if (speed) parts.push(["speed", speed]);
+    } else if (p.passed) parts.push([`${p.passed} tests`, p.passed * 5]);
+    return { pts: parts.reduce((n, [, v]) => n + v, 0), parts: [...parts, [`drop #${m.drop}`, 0]] };
+  }
   const res = r.winner == null ? "draw" : r.winner === p.team ? "win" : "loss";
   parts.push([res, res === "win" ? 100 : res === "draw" ? 40 : 10]);
   if (p.passed) parts.push([`${p.passed} tests`, p.passed * 5]);

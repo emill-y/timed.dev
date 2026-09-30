@@ -1,3 +1,5 @@
+import { generate, parseGenId } from "./generators.ts";
+
 // Problem bank. Every problem is a single JS function the player must export.
 // Prompts are written like real tickets: the skill being tested is scoping
 // the ask fast (with or without AI), not remembering syntax.
@@ -300,6 +302,8 @@ export const PROBLEMS: Problem[] = [
 ];
 
 export function getProblem(id: string): Problem {
+  const g = parseGenId(id);
+  if (g) return generate(g.family, g.seed);
   return PROBLEMS.find((p) => p.id === id) ?? PROBLEMS[0];
 }
 

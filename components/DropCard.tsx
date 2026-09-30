@@ -64,6 +64,7 @@ export default function DropCard({ user, onEnter, onError }: { user: Me | null; 
       <div className="drop-head">
         <span className="drop-tag">drop #{c.n}</span>
         <span className="drop-live"><i /> live</span>
+        <span className="drop-glitch">glitch paste on</span>
         <span className="drop-left">closes in <b>{fmtClock(left)}</b></span>
       </div>
       <div className="drop-body">
@@ -71,6 +72,7 @@ export default function DropCard({ user, onEnter, onError }: { user: Me | null; 
           <h3>{c.title}</h3>
           <p>
             A fresh generated ticket every 30 minutes. <b>One attempt</b>, {fmtClock(c.clockMs)} on your clock, fastest clear takes the board.
+            {" "}<b>Glitch paste is always on:</b> your one paste lands damaged, then the clipboard locks.
             {" "}{c.entrants} cleared so far.
           </p>
           <button className="btn-go small" onClick={take} disabled={busy || c.entered}>

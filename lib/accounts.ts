@@ -134,7 +134,7 @@ async function announce(m: Match, p: Match["players"][number], winner: 0 | 1 | n
       line: p.doneAt != null
         ? [{ t: who.name, b: true }, { t: " cleared " }, { t: `drop #${m.drop}`, b: true }]
         : [{ t: who.name, b: true }, { t: " ran out of clock on " }, { t: `drop #${m.drop}`, b: true }],
-      detail: `${problem.title}${p.doneAt != null ? ` · ${fmt(p.doneAt)}${rank ? ` · #${rank} so far` : ""}` : ` · ${p.passed}/${m.total} tests`}`,
+      detail: `${problem.title} · glitch${p.doneAt != null ? ` · ${fmt(p.doneAt)}${rank ? ` · #${rank} so far` : ""}` : ` · ${p.passed}/${m.total} tests`}`,
       pts,
       won: p.doneAt != null,
     });

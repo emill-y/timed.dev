@@ -7,7 +7,8 @@ import { currentUser } from "@/lib/auth";
 export const dynamic = "force-dynamic";
 
 // One attempt per drop per account. The attempt gets its own 10-minute clock
-// and may start any time before the drop closes.
+// and may start any time before the drop closes. Drops always run with glitch
+// paste on: one damaged paste, then the clipboard locks.
 export async function POST() {
   const me = await currentUser();
   if (!me) return NextResponse.json({ error: "sign in with GitHub to take the drop" }, { status: 401 });
@@ -18,7 +19,7 @@ export async function POST() {
     "1v1",
     "rapid",
     [{ id: playerId, name: me.username, userId: me.username.toLowerCase(), team: 0, passed: 0, attempts: 0, lastSeen: Date.now() }],
-    [],
+    ["glitch"],
     { problemId: d.problem.id, clockMs: DROP_CLOCK_MS, drop: d.n },
   );
   const entry = { matchId: match.id, playerId };

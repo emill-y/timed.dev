@@ -17,7 +17,7 @@ export async function GET() {
   const d = dropAt(now);
   // The first visitor of a window announces the new drop. No cron needed.
   if (await claimKey(`drop:${d.n}:opened`, 1, 60 * 60 * 24 * 7)) {
-    await post({ kind: "drop_open", line: [{ t: "drop " }, { t: `#${d.n}`, b: true }, { t: " is live: " }, { t: d.problem.title, b: true }], detail: "30 minutes · one attempt each · fastest clear wins", drop: d.n });
+    await post({ kind: "drop_open", line: [{ t: "drop " }, { t: `#${d.n}`, b: true }, { t: " is live: " }, { t: d.problem.title, b: true }], detail: "30 minutes · one attempt each · glitch paste on · fastest clear wins", drop: d.n });
   }
   const me = await currentUser();
   const mine = me ? await get<{ matchId: string; playerId: string }>(`drop:${d.n}:entry:${me.username.toLowerCase()}`) : null;

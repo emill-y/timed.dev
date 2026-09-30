@@ -17,7 +17,7 @@ LeetCode tested whether you could write a loop from memory. timed.dev tests **sp
 
 ## Drops: a new challenge every 30 minutes
 
-On the hour and half hour, a fresh **generated** ticket goes live (`lib/generators.ts`). Nine ticket families each randomize their rules, wording and test data from a seed, and expected answers come from executing a reference solution, so drops never run dry and are always solvable. Everyone gets **one attempt** per drop with 10 minutes on their own clock. The fastest clear takes the drop board, and the home screen counts down to the next one. There's no cron: the drop is derived from the clock, and the first visitor of a window posts "drop #N is live" to the feed. `npm run test:generators` runs 108 generated tickets through the server judge with their reference solutions.
+On the hour and half hour, a fresh **generated** ticket goes live (`lib/generators.ts`). Nine ticket families each randomize their rules, wording and test data from a seed, and expected answers come from executing a reference solution, so drops never run dry and are always solvable. Everyone gets **one attempt** per drop with 10 minutes on their own clock, and **glitch paste is always on**: one damaged paste, then the clipboard locks. The fastest clear takes the drop board, and the home screen counts down to the next one. There's no cron: the drop is derived from the clock, and the first visitor of a window posts "drop #N is live" to the feed. `npm run test:generators` runs 108 generated tickets through the server judge with their reference solutions.
 
 ## The feed
 

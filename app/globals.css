@@ -442,3 +442,4 @@ button.nav { background: none; cursor: pointer; font-family: var(--mono); }
   .drop-main { border-right: 0; border-bottom: 1px solid var(--line); }
   .drop-head { flex-wrap: wrap; }
 }
+.drop-glitch { font-size: 10.5px; letter-spacing: 1.5px; text-transform: uppercase; padding: 2px 8px; color: #0a0c12; background: var(--red); transform: skewX(-12deg); }
